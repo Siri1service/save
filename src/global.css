@@ -16,6 +16,13 @@ body,
   overflow: hidden;
 }
 
+html[data-theme='light'],
+html[data-theme='light'] body,
+html[data-theme='light'] #root {
+  background-color: #f4f4f5;
+  color: #18181b;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -28,6 +35,10 @@ body,
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 9999px;
+}
+
+html[data-theme='light'] ::-webkit-scrollbar-thumb {
+  background: rgba(24, 24, 27, 0.2);
 }
 
 ::-webkit-scrollbar-thumb:hover {

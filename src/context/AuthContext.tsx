@@ -52,6 +52,15 @@ async function loadActiveProfile(authUserId: string): Promise<UserProfile> {
   return profile;
 }
 
+async function acceptPendingWorkspaceInvitations(): Promise<void> {
+  const { data, error } = await supabase.rpc('accept_workspace_invitations');
+  if (error) throw error;
+
+  if (Array.isArray(data) && data.length > 0) {
+    localStorage.setItem('save_app_invited_workspace_id', data[0]);
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
@@ -68,6 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) throw error;
         if (!data.session?.user) return;
 
+        await acceptPendingWorkspaceInvitations();
         const profile = await loadActiveProfile(data.session.user.id);
         if (isMounted) setUser(profile);
       } catch (error) {
@@ -102,6 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!data.user) throw new Error('ไม่พบข้อมูลบัญชีผู้ใช้');
 
       try {
+        await acceptPendingWorkspaceInvitations();
         const profile = await loadActiveProfile(data.user.id);
         const { error: updateError } = await supabase
           .from('profiles')
@@ -150,6 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (data.session && data.user) {
         try {
+          await acceptPendingWorkspaceInvitations();
           const profile = await loadActiveProfile(data.user.id);
           setUser(profile);
           return { success: true, message: 'สมัครสมาชิกและเข้าสู่ระบบสำเร็จ' };

@@ -120,10 +120,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isSupabaseConfigured) {
         try {
           // Fetch workspaces
-          const { data: wsData } = await supabase.from('workspaces').select('*');
-          if (wsData && wsData.length > 0) {
-            setWorkspaces(wsData);
-            setActiveWorkspaceId(wsData[0].id);
+          const { data: wsData, error: workspacesError } = await supabase.from('workspaces').select('*');
+          if (workspacesError) throw workspacesError;
+          const accessibleWorkspaces = wsData || [];
+          setWorkspaces(accessibleWorkspaces);
+          const invitedWorkspaceId = localStorage.getItem('save_app_invited_workspace_id');
+          const initialWorkspace = accessibleWorkspaces.find((workspace) => workspace.id === invitedWorkspaceId)
+            || accessibleWorkspaces[0];
+          setActiveWorkspaceId(initialWorkspace?.id || '');
+          if (initialWorkspace?.id === invitedWorkspaceId) {
+            localStorage.removeItem('save_app_invited_workspace_id');
           }
 
           // Fetch admin users if admin
@@ -205,16 +211,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...previous.filter((transaction) => transaction.workspace_id !== activeWorkspaceId),
           ...workspaceTransactions,
         ]);
+        const workspaceMembers: WorkspaceMember[] = (membersResult.data || []).map((member) => ({
+          ...member,
+          email: member.invited_email || (member.user_id === user?.id ? user?.email || 'สมาชิกใน workspace' : 'สมาชิกใน workspace'),
+        }));
         setMembers((previous) => [
           ...previous.filter((member) => member.workspace_id !== activeWorkspaceId),
-          ...(membersResult.data || []),
+          ...workspaceMembers,
         ]);
       };
       void fetchWorkspaceDetails().catch((error) => {
         console.error('Failed to load workspace data:', error);
       });
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, user]);
 
   // Currently active workspace object
   const activeWorkspace = useMemo(() => {
@@ -314,49 +324,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Member collaboration
   const inviteMember = async (email: string, role: WorkspaceRole) => {
-    if (!activeWorkspaceId) return;
-
-    const newMember: WorkspaceMember = {
-      id: `mem-${Date.now()}`,
-      workspace_id: activeWorkspaceId,
-      user_id: `user-inv-${Date.now()}`,
-      email,
-      full_name: email.split('@')[0],
-      role,
-      status: 'accepted',
-      created_at: new Date().toISOString(),
-    };
+    if (!activeWorkspaceId) throw new Error('กรุณาเลือก workspace ก่อนส่งคำเชิญ');
 
     if (isSupabaseConfigured) {
-      await supabase.from('workspace_members').insert({
+      const { data, error } = await supabase.from('workspace_members').insert({
         workspace_id: activeWorkspaceId,
-        invited_email: email,
+        user_id: null,
+        invited_email: email.trim().toLowerCase(),
         role,
-        status: 'accepted',
-      });
+        status: 'pending',
+      }).select().single();
+      if (error) throw error;
+      if (!data) throw new Error('ไม่พบข้อมูลคำเชิญที่สร้าง');
+
+      setMembers((previous) => [{
+        ...data,
+        email: data.invited_email || email.trim().toLowerCase(),
+      }, ...previous]);
+      return;
     }
 
-    const updated = [newMember, ...members];
-    setMembers(updated);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.MEMBERS, JSON.stringify(updated));
+    throw new Error('การเชิญสมาชิกต้องเชื่อมต่อ Supabase ก่อน');
   };
 
   const removeMember = async (memberId: string) => {
     if (isSupabaseConfigured) {
-      await supabase.from('workspace_members').delete().eq('id', memberId);
+      const { error } = await supabase.from('workspace_members').delete().eq('id', memberId);
+      if (error) throw error;
     }
     const updated = members.filter((m) => m.id !== memberId);
     setMembers(updated);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.MEMBERS, JSON.stringify(updated));
+    if (!isSupabaseConfigured) localStorage.setItem(LOCAL_STORAGE_KEYS.MEMBERS, JSON.stringify(updated));
   };
 
   const updateMemberRole = async (memberId: string, role: WorkspaceRole) => {
     if (isSupabaseConfigured) {
-      await supabase.from('workspace_members').update({ role }).eq('id', memberId);
+      const { error } = await supabase.from('workspace_members').update({ role }).eq('id', memberId);
+      if (error) throw error;
     }
     const updated = members.map((m) => (m.id === memberId ? { ...m, role } : m));
     setMembers(updated);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.MEMBERS, JSON.stringify(updated));
+    if (!isSupabaseConfigured) localStorage.setItem(LOCAL_STORAGE_KEYS.MEMBERS, JSON.stringify(updated));
   };
 
   // Category Actions

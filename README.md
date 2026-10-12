@@ -11,7 +11,8 @@
 - **iOS & Android**: โครงสร้างรองรับ React Native & Expo (`app.json`) พร้อมสำหรับ Build เป็นไฟล์ Native App (.apk / .ipa / TestFlight)
 
 ### 2. 🎨 ดีไซน์สไตล์ Minimal & Modern
-- ธีมสี Dark Monochromatic สบายตา เรียบหรู ตัดกับสีสถานะการเงิน (Emerald Green สำหรับรายรับ, Rose Red สำหรับรายจ่าย)
+- สลับธีม Dark/Light ได้ และจดจำธีมที่เลือกไว้ในอุปกรณ์
+- ธีมสี Monochromatic สบายตา เรียบหรู ตัดกับสีสถานะการเงิน (Emerald Green สำหรับรายรับ, Rose Red สำหรับรายจ่าย)
 - Typography สองภาษา (Prompt สำหรับภาษาไทย และ Inter สำหรับตัวเลข/ภาษาอังกฤษ)
 - Responsive Layout 100% ปรับมุมมองอัตโนมัติทั้งบนหน้าจอมือถือ แท็บเล็ต และคอมพิวเตอร์
 
@@ -122,7 +123,7 @@ In Supabase **Authentication -> URL Configuration**, set the Site URL to the pro
 
 When deploying, create the first administrator account through Supabase Auth, then assign `profiles.role = 'admin'` to that trusted account in the Supabase SQL Editor. The public signup form cannot grant administrator access.
 
-If using an existing database, run `supabase/migrations/20261012_auth_access_control.sql` in the Supabase SQL Editor before enabling the app. For a new database, run the updated `supabase/schema.sql`. If Supabase URL and anon key are not configured, signup and login stay disabled; the app no longer creates demo accounts.
+If using an existing database, run `supabase/migrations/20261012_auth_access_control.sql` and then `supabase/migrations/20261012_workspace_invitations.sql` in the Supabase SQL Editor before enabling the app. For a new database, run the updated `supabase/schema.sql`. Workspace owners can invite an email as an editor or viewer; the invited person must sign up or log in using that same email to claim access to the shared workspace. If Supabase URL and anon key are not configured, signup and login stay disabled; the app no longer creates demo accounts.
 
 ---
 

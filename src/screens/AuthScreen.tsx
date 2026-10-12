@@ -3,9 +3,11 @@ import { useAuth } from '../context/AuthContext';
 import { theme } from '../lib/theme';
 import { Icon } from '../components/Icon';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { useTheme } from '../context/ThemeContext';
 
 export const AuthScreen: React.FC = () => {
   const { login, signup, resendSignupConfirmation, authNotice } = useAuth();
+  const { mode: themeMode, toggleTheme } = useTheme();
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -86,6 +88,28 @@ export const AuthScreen: React.FC = () => {
         boxSizing: 'border-box',
       }}
     >
+      <button
+        onClick={toggleTheme}
+        aria-label={themeMode === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
+        title={themeMode === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
+        style={{
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '40px',
+          height: '40px',
+          backgroundColor: theme.colors.card,
+          border: `1px solid ${theme.colors.border}`,
+          borderRadius: theme.radius.full,
+          color: theme.colors.text,
+          cursor: 'pointer',
+        }}
+      >
+        <Icon name={themeMode === 'dark' ? 'Sun' : 'Moon'} size={18} color="currentColor" />
+      </button>
       <div
         style={{
           width: '100%',
@@ -111,7 +135,7 @@ export const AuthScreen: React.FC = () => {
               marginBottom: '12px',
             }}
           >
-            <Icon name="Wallet" size={24} color="#09090b" />
+            <Icon name="Wallet" size={24} color={theme.colors.primaryText} />
           </div>
           <h1
             style={{

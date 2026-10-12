@@ -31,7 +31,7 @@ export interface Workspace {
 export interface WorkspaceMember {
   id: string;
   workspace_id: string;
-  user_id: string;
+  user_id: string | null;
   email: string;
   full_name?: string;
   role: WorkspaceRole;
@@ -90,4 +90,3 @@ export interface EmailTemplate {
 }
 
 export type FilterPeriod = 'today' | 'week' | 'month' | 'year' | 'all' | 'custom';
-

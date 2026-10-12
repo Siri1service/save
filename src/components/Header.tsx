@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { theme } from '../lib/theme';
 import { Icon } from './Icon';
+import { ThemeMode } from '../lib/theme';
 
 interface HeaderProps {
   onOpenWorkspaceModal: () => void;
@@ -11,6 +12,8 @@ interface HeaderProps {
   onOpenExportModal: () => void;
   activeTab: 'dashboard' | 'transactions' | 'admin';
   setActiveTab: (tab: 'dashboard' | 'transactions' | 'admin') => void;
+  themeMode: ThemeMode;
+  onToggleTheme: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +23,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenExportModal,
   activeTab,
   setActiveTab,
+  themeMode,
+  onToggleTheme,
 }) => {
   const { user, isAdmin, logout } = useAuth();
   const { activeWorkspace } = useApp();
@@ -55,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
               justifyContent: 'center',
             }}
           >
-            <Icon name="Wallet" size={18} color="#09090b" />
+            <Icon name="Wallet" size={18} color={theme.colors.primaryText} />
           </div>
           <div>
             <span
@@ -192,6 +197,26 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Action Utilities & User Menu */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          onClick={onToggleTheme}
+          aria-label={themeMode === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
+          title={themeMode === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '34px',
+            height: '34px',
+            backgroundColor: theme.colors.card,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.radius.full,
+            color: theme.colors.textSecondary,
+            cursor: 'pointer',
+          }}
+        >
+          <Icon name={themeMode === 'dark' ? 'Sun' : 'Moon'} size={16} color="currentColor" />
+        </button>
+
         {/* Invite Friend */}
         <button
           onClick={onOpenInviteModal}

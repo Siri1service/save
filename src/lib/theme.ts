@@ -54,3 +54,45 @@ export const theme = {
   },
 };
 
+export type ThemeMode = 'dark' | 'light';
+
+const themePalettes: Record<ThemeMode, typeof theme.colors> = {
+  dark: {
+    ...theme.colors,
+    bg: '#09090b',
+    surface: '#121215',
+    card: '#18181b',
+    cardHover: '#202024',
+    elevated: '#27272a',
+    border: 'rgba(255, 255, 255, 0.08)',
+    borderStrong: 'rgba(255, 255, 255, 0.16)',
+    text: '#fafafa',
+    textSecondary: '#a1a1aa',
+    textMuted: '#71717a',
+    textDim: '#52525b',
+    primary: '#ffffff',
+    primaryText: '#09090b',
+  },
+  light: {
+    ...theme.colors,
+    bg: '#f4f4f5',
+    surface: '#ffffff',
+    card: '#ffffff',
+    cardHover: '#f4f4f5',
+    elevated: '#e4e4e7',
+    border: 'rgba(24, 24, 27, 0.1)',
+    borderStrong: 'rgba(24, 24, 27, 0.18)',
+    text: '#18181b',
+    textSecondary: '#3f3f46',
+    textMuted: '#71717a',
+    textDim: '#a1a1aa',
+    primary: '#18181b',
+    primaryText: '#ffffff',
+  },
+};
+
+export const applyTheme = (mode: ThemeMode): void => {
+  Object.assign(theme.colors, themePalettes[mode]);
+  document.documentElement.dataset.theme = mode;
+  document.documentElement.style.colorScheme = mode;
+};

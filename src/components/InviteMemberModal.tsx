@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { theme } from '../lib/theme';
 import { Icon } from './Icon';
 import { WorkspaceRole } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface InviteMemberModalProps {
   isOpen: boolean;
@@ -11,27 +12,37 @@ interface InviteMemberModalProps {
 
 export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, onClose }) => {
   const { activeWorkspace, members, inviteMember, removeMember, updateMemberRole } = useApp();
+  const { user, isAdmin } = useAuth();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<WorkspaceRole>('editor');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const canManageMembers = Boolean(isAdmin || (user && activeWorkspace?.owner_id === user.id));
 
   if (!isOpen) return null;
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !email.includes('@')) {
-      alert('กรุณากรอก Email ที่ถูกต้อง');
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setFeedback({ type: 'error', message: 'กรุณากรอกอีเมลที่ถูกต้อง' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await inviteMember(email.trim(), role);
+      await inviteMember(normalizedEmail, role);
       setEmail('');
-      alert(`ส่งคำเชิญไปยัง ${email} เรียบร้อยแล้ว`);
-    } catch (err) {
-      console.error(err);
-      alert('เกิดข้อผิดพลาดในการเชิญสมาชิก');
+      setFeedback({
+        type: 'success',
+        message: `บันทึกคำเชิญสำหรับ ${normalizedEmail} แล้ว กรุณาให้เพื่อนสมัครหรือเข้าสู่ระบบด้วยอีเมลนี้เพื่อรับสิทธิ์เข้าถึง`,
+      });
+    } catch (error) {
+      console.error('Failed to invite workspace member:', error);
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? `ส่งคำเชิญไม่สำเร็จ: ${error.message}` : 'ส่งคำเชิญไม่สำเร็จ กรุณาลองใหม่',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -96,8 +107,13 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
           </button>
         </div>
 
-        {/* Invite Form */}
-        <form
+        {!canManageMembers && (
+          <p style={{ fontSize: '12px', color: theme.colors.textMuted, marginBottom: '16px' }}>
+            เฉพาะเจ้าของ workspace เท่านั้นที่เชิญหรือจัดการสมาชิกได้
+          </p>
+        )}
+
+        {canManageMembers && <form
           onSubmit={handleInvite}
           style={{
             backgroundColor: theme.colors.elevated,
@@ -111,7 +127,7 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
           }}
         >
           <div style={{ fontSize: '13px', fontWeight: '600', color: theme.colors.text }}>
-            ส่งคำเชิญใหม่
+            สร้างคำเชิญใหม่
           </div>
 
           <div>
@@ -160,7 +176,6 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
             >
               <option value="editor">ผู้แก้ไข (Editor) - บันทึกและแก้ไขรายการได้</option>
               <option value="viewer">ผู้เข้าชม (Viewer) - ดูข้อมูลและส่งออกรายงานเท่านั้น</option>
-              <option value="owner">เจ้าของร่วม (Owner) - สิทธิ์เต็มรูปแบบ</option>
             </select>
             <p style={{ fontSize: '11px', color: theme.colors.textDim, marginTop: '4px' }}>
               {roleLabels[role]?.desc}
@@ -182,14 +197,31 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
               marginTop: '4px',
             }}
           >
-            {isSubmitting ? 'กำลังส่งคำเชิญ...' : 'ส่งคำเชิญ'}
+            {isSubmitting ? 'กำลังสร้างคำเชิญ...' : 'สร้างคำเชิญ'}
           </button>
-        </form>
+        </form>}
+
+        {feedback && (
+          <div
+            role={feedback.type === 'error' ? 'alert' : 'status'}
+            style={{
+              padding: '10px 12px',
+              marginBottom: '16px',
+              borderRadius: theme.radius.md,
+              backgroundColor: feedback.type === 'error' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+              color: feedback.type === 'error' ? '#f87171' : '#34d399',
+              fontSize: '12px',
+              lineHeight: 1.6,
+            }}
+          >
+            {feedback.message}
+          </div>
+        )}
 
         {/* Existing Members */}
         <div>
           <div style={{ fontSize: '13px', fontWeight: '600', color: theme.colors.textSecondary, marginBottom: '10px' }}>
-            สมาชิกที่มีสิทธิ์เข้าถึง ({members.length} คน)
+            สมาชิกและคำเชิญ ({members.length})
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -228,47 +260,65 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
                       {m.full_name || m.email}
                     </div>
                     <div style={{ fontSize: '11px', color: theme.colors.textMuted }}>{m.email}</div>
+                    {m.status === 'pending' && (
+                      <div style={{ fontSize: '10px', color: '#fbbf24', marginTop: '2px' }}>
+                        รอสมัคร/เข้าสู่ระบบด้วยอีเมลนี้
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <select
-                    value={m.role}
-                    onChange={(e) => updateMemberRole(m.id, e.target.value as WorkspaceRole)}
-                    style={{
-                      backgroundColor: theme.colors.card,
-                      border: `1px solid ${theme.colors.border}`,
-                      borderRadius: theme.radius.sm,
-                      padding: '4px 8px',
-                      color: roleLabels[m.role]?.color || theme.colors.text,
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="owner">Owner</option>
-                    <option value="editor">Editor</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
+                {canManageMembers && m.user_id !== user?.id && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <select
+                      value={m.role}
+                      onChange={async (e) => {
+                        try {
+                          await updateMemberRole(m.id, e.target.value as WorkspaceRole);
+                        } catch (error) {
+                          console.error('Failed to update workspace member role:', error);
+                          setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'เปลี่ยนสิทธิ์ไม่สำเร็จ' });
+                        }
+                      }}
+                      style={{
+                        backgroundColor: theme.colors.card,
+                        border: `1px solid ${theme.colors.border}`,
+                        borderRadius: theme.radius.sm,
+                        padding: '4px 8px',
+                        color: roleLabels[m.role]?.color || theme.colors.text,
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="editor">Editor</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
 
-                  <button
-                    onClick={() => {
-                      if (confirm(`ยกเลิกสิทธิ์ของ ${m.email}?`)) {
-                        removeMember(m.id);
-                      }
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: theme.colors.textDim,
-                      cursor: 'pointer',
-                      padding: '4px',
-                    }}
-                    title="ลบสมาชิก"
-                  >
-                    <Icon name="Trash2" size={14} color="currentColor" />
-                  </button>
-                </div>
+                    <button
+                      onClick={async () => {
+                        if (confirm(`ยกเลิกสิทธิ์ของ ${m.email}?`)) {
+                          try {
+                            await removeMember(m.id);
+                          } catch (error) {
+                            console.error('Failed to remove workspace member:', error);
+                            setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'ยกเลิกคำเชิญไม่สำเร็จ' });
+                          }
+                        }
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: theme.colors.textDim,
+                        cursor: 'pointer',
+                        padding: '4px',
+                      }}
+                      title="ลบสมาชิก"
+                    >
+                      <Icon name="Trash2" size={14} color="currentColor" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -277,4 +327,3 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
     </div>
   );
 };
-

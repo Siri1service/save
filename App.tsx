@@ -14,9 +14,11 @@ import { CategoryModal } from './src/components/CategoryModal';
 import { ExportModal } from './src/components/ExportModal';
 import { Transaction } from './src/types';
 import { Icon } from './src/components/Icon';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
 const MainApp: React.FC = () => {
   const { user, isAdmin, isLoading } = useAuth();
+  const { mode: themeMode, toggleTheme } = useTheme();
 
   // Active Main Tab
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'admin'>('dashboard');
@@ -58,7 +60,7 @@ const MainApp: React.FC = () => {
               justifyContent: 'center',
             }}
           >
-            <Icon name="Wallet" size={20} color="#09090b" />
+            <Icon name="Wallet" size={20} color={theme.colors.primaryText} />
           </div>
           <div>กำลังโหลดระบบ...</div>
         </div>
@@ -99,6 +101,8 @@ const MainApp: React.FC = () => {
         onOpenInviteModal={() => setIsInviteModalOpen(true)}
         onOpenCategoryModal={() => setIsCategoryModalOpen(true)}
         onOpenExportModal={() => setIsExportModalOpen(true)}
+        themeMode={themeMode}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Content Area */}
@@ -164,7 +168,7 @@ const MainApp: React.FC = () => {
             fontWeight: activeTab === 'dashboard' ? '600' : '400',
           }}
         >
-          <Icon name="LayoutDashboard" size={20} color={activeTab === 'dashboard' ? '#ffffff' : '#71717a'} />
+          <Icon name="LayoutDashboard" size={20} color={activeTab === 'dashboard' ? theme.colors.primaryText : theme.colors.textMuted} />
           <span>แดชบอร์ด</span>
         </button>
 
@@ -179,14 +183,14 @@ const MainApp: React.FC = () => {
             borderRadius: '50%',
             backgroundColor: theme.colors.primary,
             border: 'none',
-            color: '#09090b',
+            color: theme.colors.primaryText,
             cursor: 'pointer',
             boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
             transform: 'translateY(-6px)',
           }}
           title="บันทึกรายการ"
         >
-          <Icon name="Plus" size={22} color="#09090b" />
+          <Icon name="Plus" size={22} color={theme.colors.primaryText} />
         </button>
 
         <button
@@ -204,7 +208,7 @@ const MainApp: React.FC = () => {
             fontWeight: activeTab === 'transactions' ? '600' : '400',
           }}
         >
-          <Icon name="Clock" size={20} color={activeTab === 'transactions' ? '#ffffff' : '#71717a'} />
+          <Icon name="Clock" size={20} color={activeTab === 'transactions' ? theme.colors.primaryText : theme.colors.textMuted} />
           <span>ประวัติ</span>
         </button>
 
@@ -262,10 +266,12 @@ const MainApp: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppProvider>
-        <MainApp />
-      </AppProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppProvider>
+          <MainApp />
+        </AppProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
