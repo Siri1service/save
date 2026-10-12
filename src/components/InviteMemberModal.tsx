@@ -5,6 +5,19 @@ import { Icon } from './Icon';
 import { WorkspaceRole } from '../types';
 import { useAuth } from '../context/AuthContext';
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+  return 'กรุณาลองใหม่';
+};
+
 interface InviteMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,7 +54,7 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
       console.error('Failed to invite workspace member:', error);
       setFeedback({
         type: 'error',
-        message: error instanceof Error ? `ส่งคำเชิญไม่สำเร็จ: ${error.message}` : 'ส่งคำเชิญไม่สำเร็จ กรุณาลองใหม่',
+        message: `ส่งคำเชิญไม่สำเร็จ: ${getErrorMessage(error)}`,
       });
     } finally {
       setIsSubmitting(false);

@@ -236,6 +236,8 @@ export const AuthScreen: React.FC = () => {
             type="button"
             onClick={() => void handleSocialLogin('google')}
             disabled={!isSupabaseConfigured || isSubmitting || socialProvider !== null}
+            aria-label="เข้าสู่ระบบด้วย Gmail"
+            title="เข้าสู่ระบบด้วยบัญชี Google (Gmail)"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -252,7 +254,7 @@ export const AuthScreen: React.FC = () => {
             }}
           >
             <Icon name="Chrome" size={16} color="currentColor" />
-            {socialProvider === 'google' ? 'กำลังเชื่อมต่อ...' : 'Google'}
+            {socialProvider === 'google' ? 'กำลังเชื่อมต่อ...' : 'Gmail'}
           </button>
           <button
             type="button"

@@ -82,8 +82,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!data.session?.user) return;
 
         const profile = await loadActiveProfile(data.session.user.id);
-        if (isMounted) setUser(profile);
         await acceptPendingWorkspaceInvitations();
+        if (isMounted) setUser(profile);
       } catch (error) {
         console.error('Error initializing auth:', error);
         if (isMounted) {
@@ -125,6 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const signedInAt = new Date().toISOString();
+      await acceptPendingWorkspaceInvitations();
       setUser({ ...profile, last_sign_in_at: signedInAt });
       const { error: updateError } = await supabase
         .from('profiles')
@@ -132,7 +133,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('id', data.user.id);
       if (updateError) console.error('Could not update the last sign-in timestamp:', updateError);
 
-      await acceptPendingWorkspaceInvitations();
       return { success: true, message: 'เข้าสู่ระบบสำเร็จ' };
     } catch (error) {
       if (getErrorCode(error) === 'email_not_confirmed') {
@@ -203,8 +203,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw profileError;
         }
 
-        setUser(profile);
         await acceptPendingWorkspaceInvitations();
+        setUser(profile);
         return { success: true, message: 'สมัครสมาชิกและเข้าสู่ระบบสำเร็จ' };
       }
 
