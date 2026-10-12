@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { theme } from '../lib/theme';
 import { Icon } from '../components/Icon';
@@ -30,6 +30,31 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
     stats,
     activeWorkspace,
   } = useApp();
+  const [visibleCount, setVisibleCount] = useState(30);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setVisibleCount(30);
+  }, [activeWorkspace?.id, period, typeFilter, searchQuery, customStartDate, customEndDate]);
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    const scrollContainer = sentinel?.closest('main');
+    if (!sentinel || !scrollContainer || visibleCount >= filteredTransactions.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((count) => Math.min(count + 30, filteredTransactions.length));
+        }
+      },
+      { root: scrollContainer, rootMargin: '120px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [visibleCount, filteredTransactions.length]);
+
+  const visibleTransactions = filteredTransactions.slice(0, visibleCount);
 
   const periods: { label: string; value: FilterPeriod }[] = [
     { label: 'เดือนนี้', value: 'month' },
@@ -313,7 +338,7 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
             </div>
           </div>
         ) : (
-          filteredTransactions.map((tx) => (
+          visibleTransactions.map((tx) => (
             <div
               key={tx.id}
               onClick={() => onEditTransaction(tx)}
@@ -391,8 +416,16 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
             </div>
           ))
         )}
+        {visibleCount < filteredTransactions.length && (
+          <div
+            ref={loadMoreRef}
+            role="status"
+            style={{ padding: '12px', textAlign: 'center', color: theme.colors.textMuted, fontSize: '12px' }}
+          >
+            เลื่อนลงเพื่อแสดงรายการเพิ่มเติม
+          </div>
+        )}
       </div>
     </div>
   );
 };
-

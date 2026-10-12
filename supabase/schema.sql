@@ -55,6 +55,7 @@ create table if not exists public.categories (
   type text not null check (type in ('income', 'expense')),
   icon text not null default 'Tag',
   color text not null default '#6366f1',
+  sort_order integer not null default 0,
   is_default boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -141,6 +142,73 @@ returns boolean language sql stable security definer set search_path = public as
     where wm.workspace_id = ws_id and wm.user_id = auth.uid() and wm.role in ('owner', 'editor') and wm.status = 'accepted'
   )));
 $$;
+
+create or replace function public.admin_delete_transactions_by_date_range(
+  p_start_date date,
+  p_end_date date
+)
+returns bigint language plpgsql security definer set search_path = public as $$
+declare
+  deleted_count bigint;
+begin
+  if not public.is_admin() then
+    raise exception 'Only an active administrator can delete transactions across workspaces';
+  end if;
+
+  if p_start_date is null or p_end_date is null or p_start_date > p_end_date then
+    raise exception 'A valid inclusive start and end date range is required';
+  end if;
+
+  delete from public.transactions
+  where date >= p_start_date and date <= p_end_date;
+
+  get diagnostics deleted_count = row_count;
+  return deleted_count;
+end;
+$$;
+
+revoke all on function public.admin_delete_transactions_by_date_range(date, date) from public;
+grant execute on function public.admin_delete_transactions_by_date_range(date, date) to authenticated;
+
+create or replace function public.swap_category_order(
+  p_category_id uuid,
+  p_adjacent_category_id uuid
+)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  current_category public.categories%rowtype;
+  adjacent_category public.categories%rowtype;
+begin
+  select * into current_category
+  from public.categories
+  where id = p_category_id;
+
+  select * into adjacent_category
+  from public.categories
+  where id = p_adjacent_category_id;
+
+  if current_category.id is null or adjacent_category.id is null
+    or current_category.workspace_id <> adjacent_category.workspace_id
+    or current_category.type <> adjacent_category.type then
+    raise exception 'Categories must exist in the same workspace and category type';
+  end if;
+
+  if not public.has_workspace_edit_access(current_category.workspace_id) then
+    raise exception 'You do not have permission to reorder categories in this workspace';
+  end if;
+
+  update public.categories
+  set sort_order = adjacent_category.sort_order
+  where id = current_category.id;
+
+  update public.categories
+  set sort_order = current_category.sort_order
+  where id = adjacent_category.id;
+end;
+$$;
+
+revoke all on function public.swap_category_order(uuid, uuid) from public;
+grant execute on function public.swap_category_order(uuid, uuid) to authenticated;
 
 create or replace function public.accept_workspace_invitations()
 returns uuid[] language plpgsql security definer set search_path = public as $$

@@ -30,6 +30,7 @@ interface AppContextType {
   activeWorkspace: Workspace | null;
   setActiveWorkspaceId: (id: string) => void;
   createWorkspace: (name: string, type: WorkspaceType, description?: string) => Promise<Workspace>;
+  updateWorkspace: (id: string, name: string, description?: string) => Promise<void>;
   deleteWorkspace: (id: string) => Promise<void>;
   
   // Workspace Members
@@ -42,6 +43,7 @@ interface AppContextType {
   categories: Category[];
   addCategory: (name: string, type: TransactionType, icon: string, color: string) => Promise<void>;
   updateCategory: (id: string, updates: Partial<Category>) => Promise<void>;
+  moveCategory: (id: string, direction: -1 | 1) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
 
   // Transactions
@@ -78,6 +80,7 @@ interface AppContextType {
   updateUserStatus: (userId: string, status: 'active' | 'suspended') => Promise<void>;
   updateUserRole: (userId: string, role: 'user' | 'admin') => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
+  deleteTransactionsByDateRange: (startDate: string, endDate: string) => Promise<number>;
   emailTemplates: EmailTemplate[];
   emailLogs: EmailLog[];
   sendEmailToUser: (recipientEmail: string, templateType: string, customSubject?: string, customContent?: string, recipientUserId?: string) => Promise<void>;
@@ -233,7 +236,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Current categories for active workspace
   const activeCategories = useMemo(() => {
-    return categories.filter((c) => c.workspace_id === activeWorkspaceId);
+    return categories
+      .filter((c) => c.workspace_id === activeWorkspaceId)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   }, [categories, activeWorkspaceId]);
 
   // Current members for active workspace
@@ -322,6 +327,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveWorkspaceId(updatedWorkspaces[0]?.id || '');
   };
 
+  const updateWorkspace = async (id: string, name: string, description?: string) => {
+    const workspace = workspaces.find((item) => item.id === id);
+    if (!workspace) throw new Error('ไม่พบ workspace ที่ต้องการแก้ไข');
+    if (!isAdmin && workspace.owner_id !== user?.id) throw new Error('เฉพาะเจ้าของ workspace เท่านั้นที่แก้ไขชื่อได้');
+
+    const normalizedName = name.trim();
+    if (!normalizedName) throw new Error('กรุณากรอกชื่อ workspace');
+
+    const normalizedDescription = description?.trim() || '';
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('workspaces')
+        .update({ name: normalizedName, description: normalizedDescription || null })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      if (!data) throw new Error('ไม่พบ workspace ที่แก้ไข');
+      setWorkspaces((previous) => previous.map((item) => item.id === id ? data : item));
+      return;
+    }
+
+    const updated = workspaces.map((item) => item.id === id
+      ? { ...item, name: normalizedName, description: normalizedDescription || undefined }
+      : item);
+    setWorkspaces(updated);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.WORKSPACES, JSON.stringify(updated));
+  };
+
   // Member collaboration
   const inviteMember = async (email: string, role: WorkspaceRole) => {
     if (!activeWorkspaceId) throw new Error('กรุณาเลือก workspace ก่อนส่งคำเชิญ');
@@ -378,6 +412,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type,
       icon,
       color,
+      sort_order: categories.filter((category) => category.workspace_id === activeWorkspaceId && category.type === type)
+        .reduce((maxOrder, category) => Math.max(maxOrder, category.sort_order ?? -1), -1) + 1,
       is_default: false,
       created_at: new Date().toISOString(),
     };
@@ -389,6 +425,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         type,
         icon,
         color,
+        sort_order: categories.filter((category) => category.workspace_id === activeWorkspaceId && category.type === type)
+          .reduce((maxOrder, category) => Math.max(maxOrder, category.sort_order ?? -1), -1) + 1,
         is_default: false,
       }).select().single();
       if (error) throw error;
@@ -400,6 +438,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = [...categories, newCat];
     setCategories(updated);
     localStorage.setItem(LOCAL_STORAGE_KEYS.CATEGORIES, JSON.stringify(updated));
+  };
+
+  const moveCategory = async (id: string, direction: -1 | 1) => {
+    const current = categories.find((category) => category.id === id && category.workspace_id === activeWorkspaceId);
+    if (!current) throw new Error('ไม่พบหมวดหมู่ที่ต้องการจัดลำดับ');
+
+    const siblings = categories
+      .filter((category) => category.workspace_id === current.workspace_id && category.type === current.type)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const currentIndex = siblings.findIndex((category) => category.id === id);
+    const adjacent = siblings[currentIndex + direction];
+    if (!adjacent) return;
+
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.rpc('swap_category_order', {
+        p_category_id: current.id,
+        p_adjacent_category_id: adjacent.id,
+      });
+      if (error) throw error;
+    }
+
+    const reordered = [...siblings];
+    [reordered[currentIndex], reordered[currentIndex + direction]] =
+      [reordered[currentIndex + direction], reordered[currentIndex]];
+    const orderedCategories = reordered.map((category, index) => ({ ...category, sort_order: index }));
+    const changedById = new Map(orderedCategories.map((category) => [category.id, category]));
+    const updated = categories.map((category) => changedById.get(category.id) || category);
+    setCategories(updated);
+    if (!isSupabaseConfigured) localStorage.setItem(LOCAL_STORAGE_KEYS.CATEGORIES, JSON.stringify(updated));
   };
 
   const updateCategory = async (id: string, updates: Partial<Category>) => {
@@ -640,6 +707,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(updated));
   };
 
+  const deleteTransactionsByDateRange = async (startDate: string, endDate: string): Promise<number> => {
+    if (!isAdmin) throw new Error('ไม่มีสิทธิ์ลบรายการย้อนหลัง');
+    if (!isSupabaseConfigured) throw new Error('ต้องเชื่อมต่อฐานข้อมูล Supabase ก่อนลบรายการ');
+    if (!startDate || !endDate || startDate > endDate) {
+      throw new Error('กรุณาระบุช่วงวันที่ให้ถูกต้อง');
+    }
+
+    const { data, error } = await supabase.rpc('admin_delete_transactions_by_date_range', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+    });
+    if (error) throw error;
+
+    const deletedCount = Number(data);
+    if (!Number.isSafeInteger(deletedCount) || deletedCount < 0) {
+      throw new Error('ฐานข้อมูลส่งผลการลบกลับมาไม่ถูกต้อง');
+    }
+
+    setTransactions((previous) => previous.filter(
+      (transaction) => transaction.date < startDate || transaction.date > endDate
+    ));
+    return deletedCount;
+  };
+
   const sendEmailToUser = async (
     recipientEmail: string,
     templateType: string,
@@ -681,6 +772,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeWorkspace,
         setActiveWorkspaceId,
         createWorkspace,
+        updateWorkspace,
         deleteWorkspace,
         members: activeMembers,
         inviteMember,
@@ -689,6 +781,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         categories: activeCategories,
         addCategory,
         updateCategory,
+        moveCategory,
         deleteCategory,
         transactions,
         filteredTransactions,
@@ -710,6 +803,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUserStatus,
         updateUserRole,
         deleteUser,
+        deleteTransactionsByDateRange,
         emailTemplates: EMAIL_TEMPLATES,
         emailLogs,
         sendEmailToUser,

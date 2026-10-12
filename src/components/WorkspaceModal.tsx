@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { theme } from '../lib/theme';
 import { Icon } from './Icon';
 import { WorkspaceType } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface WorkspaceModalProps {
   isOpen: boolean;
@@ -15,14 +16,18 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ isOpen, onClose 
     activeWorkspace,
     setActiveWorkspaceId,
     createWorkspace,
+    updateWorkspace,
     deleteWorkspace,
   } = useApp();
+  const { user, isAdmin } = useAuth();
 
   const [isCreating, setIsCreating] = useState(false);
+  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [type, setType] = useState<WorkspaceType>('personal');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -42,6 +47,24 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ isOpen, onClose 
     } catch (err) {
       console.error(err);
       alert('เกิดข้อผิดพลาดในการสร้าง');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRenameWorkspace = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingWorkspaceId) return;
+    setIsSubmitting(true);
+    setFeedback(null);
+    try {
+      await updateWorkspace(editingWorkspaceId, name, description);
+      setEditingWorkspaceId(null);
+      setName('');
+      setDescription('');
+    } catch (error) {
+      console.error('Failed to update workspace name:', error);
+      setFeedback(error instanceof Error ? error.message : 'แก้ไขชื่อไม่สำเร็จ กรุณาลองใหม่');
     } finally {
       setIsSubmitting(false);
     }
@@ -289,10 +312,74 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ isOpen, onClose 
           </form>
         )}
 
+        {feedback && (
+          <div role="alert" style={{ color: '#f87171', fontSize: '12px', marginBottom: '12px' }}>
+            {feedback}
+          </div>
+        )}
+
         {/* Existing Workspaces List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {workspaces.map((ws) => {
             const isActive = ws.id === activeWorkspace?.id;
+            const canEdit = isAdmin || ws.owner_id === user?.id;
+            if (editingWorkspaceId === ws.id) {
+              return (
+                <form
+                  key={ws.id}
+                  onSubmit={handleRenameWorkspace}
+                  onClick={(event) => event.stopPropagation()}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    padding: '12px',
+                    borderRadius: theme.radius.lg,
+                    backgroundColor: theme.colors.elevated,
+                    border: `1px solid ${theme.colors.borderStrong}`,
+                  }}
+                >
+                  <label style={{ color: theme.colors.textSecondary, fontSize: '12px' }}>
+                    {ws.type === 'shop' ? 'ชื่อร้านค้า' : 'ชื่อบัญชี'}
+                    <input
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      required
+                      autoFocus
+                      style={{
+                        width: '100%',
+                        marginTop: '5px',
+                        padding: '8px 10px',
+                        backgroundColor: theme.colors.card,
+                        border: `1px solid ${theme.colors.border}`,
+                        borderRadius: theme.radius.md,
+                        color: theme.colors.text,
+                      }}
+                    />
+                  </label>
+                  <label style={{ color: theme.colors.textSecondary, fontSize: '12px' }}>
+                    คำอธิบาย
+                    <input
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      style={{
+                        width: '100%',
+                        marginTop: '5px',
+                        padding: '8px 10px',
+                        backgroundColor: theme.colors.card,
+                        border: `1px solid ${theme.colors.border}`,
+                        borderRadius: theme.radius.md,
+                        color: theme.colors.text,
+                      }}
+                    />
+                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button type="button" onClick={() => setEditingWorkspaceId(null)} disabled={isSubmitting}>ยกเลิก</button>
+                    <button type="submit" disabled={isSubmitting}>{isSubmitting ? 'กำลังบันทึก...' : 'บันทึก'}</button>
+                  </div>
+                </form>
+              );
+            }
             return (
               <div
                 key={ws.id}
@@ -358,6 +445,30 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ isOpen, onClose 
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingWorkspaceId(ws.id);
+                        setName(ws.name);
+                        setDescription(ws.description || '');
+                        setFeedback(null);
+                      }}
+                      style={{
+                        padding: '6px',
+                        borderRadius: theme.radius.sm,
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: theme.colors.textSecondary,
+                        cursor: 'pointer',
+                      }}
+                      title="แก้ไขชื่อและคำอธิบาย"
+                      aria-label={`แก้ไขชื่อ ${ws.name}`}
+                    >
+                      <Icon name="Pencil" size={15} color="currentColor" />
+                    </button>
+                  )}
                   {workspaces.length > 1 && (
                     <button
                       type="button"
@@ -388,4 +499,3 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ isOpen, onClose 
     </div>
   );
 };
-

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { theme } from '../lib/theme';
 import { Icon } from './Icon';
-import { TransactionType } from '../types';
+import { Category, TransactionType } from '../types';
 
 interface CategoryModalProps {
   isOpen: boolean;
@@ -41,32 +41,67 @@ const PRESET_ICONS = [
 ];
 
 export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose }) => {
-  const { categories, addCategory, deleteCategory } = useApp();
+  const { categories, addCategory, updateCategory, moveCategory, deleteCategory } = useApp();
 
   const [activeTab, setActiveTab] = useState<TransactionType>('expense');
   const [name, setName] = useState('');
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
   const [selectedIcon, setSelectedIcon] = useState('Tag');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const currentCategories = categories.filter((c) => c.type === activeTab);
+  const currentCategories = categories
+    .filter((c) => c.type === activeTab)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  const handleEditCategory = (category: Category) => {
+    setEditingCategory(category);
+    setName(category.name);
+    setSelectedColor(category.color);
+    setSelectedIcon(category.icon || 'Tag');
+    setFeedback(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingCategory(null);
+    setName('');
+    setSelectedColor(PRESET_COLORS[0]);
+    setSelectedIcon('Tag');
+  };
+
+  const handleTabChange = (tab: TransactionType) => {
+    if (editingCategory && editingCategory.type !== tab) cancelEdit();
+    setFeedback(null);
+    setActiveTab(tab);
+  };
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      alert('กรุณากรอกชื่อหมวดหมู่');
+      setFeedback('กรุณากรอกชื่อหมวดหมู่');
       return;
     }
 
     setIsSubmitting(true);
+    setFeedback(null);
     try {
-      await addCategory(name.trim(), activeTab, selectedIcon, selectedColor);
-      setName('');
-    } catch (err) {
-      console.error(err);
-      alert('เกิดข้อผิดพลาดในการเพิ่มหมวดหมู่');
+      if (editingCategory) {
+        await updateCategory(editingCategory.id, {
+          name: name.trim(),
+          icon: selectedIcon,
+          color: selectedColor,
+        });
+        cancelEdit();
+      } else {
+        await addCategory(name.trim(), activeTab, selectedIcon, selectedColor);
+        setName('');
+      }
+    } catch (error) {
+      console.error('Failed to save category:', error);
+      setFeedback(error instanceof Error ? `บันทึกหมวดหมู่ไม่สำเร็จ: ${error.message}` : 'บันทึกหมวดหมู่ไม่สำเร็จ กรุณาลองใหม่');
     } finally {
       setIsSubmitting(false);
     }
@@ -74,7 +109,23 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
 
   const handleDelete = async (id: string, catName: string) => {
     if (confirm(`คุณแน่ใจว่าต้องการลบหมวดหมู่ "${catName}"?`)) {
-      await deleteCategory(id);
+      try {
+        await deleteCategory(id);
+        if (editingCategory?.id === id) cancelEdit();
+      } catch (error) {
+        console.error('Failed to delete category:', error);
+        setFeedback(error instanceof Error ? `ลบหมวดหมู่ไม่สำเร็จ: ${error.message}` : 'ลบหมวดหมู่ไม่สำเร็จ กรุณาลองใหม่');
+      }
+    }
+  };
+
+  const handleMoveCategory = async (category: Category, direction: -1 | 1) => {
+    try {
+      await moveCategory(category.id, direction);
+      setFeedback(null);
+    } catch (error) {
+      console.error('Failed to reorder category:', error);
+      setFeedback(error instanceof Error ? `จัดลำดับไม่สำเร็จ: ${error.message}` : 'จัดลำดับไม่สำเร็จ กรุณาลองใหม่');
     }
   };
 
@@ -114,7 +165,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
               จัดการหมวดหมู่ (Categories)
             </h2>
             <p style={{ fontSize: '12px', color: theme.colors.textMuted }}>
-              เพิ่มและลบหมวดหมู่รายรับและรายจ่ายตามต้องการ
+              เพิ่ม แก้ไข และจัดลำดับหมวดหมู่รายรับและรายจ่ายได้ตามต้องการ
             </p>
           </div>
           <button
@@ -143,7 +194,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
         >
           <button
             type="button"
-            onClick={() => setActiveTab('expense')}
+            onClick={() => handleTabChange('expense')}
             style={{
               flex: 1,
               padding: '8px',
@@ -161,7 +212,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('income')}
+            onClick={() => handleTabChange('income')}
             style={{
               flex: 1,
               padding: '8px',
@@ -194,7 +245,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
           }}
         >
           <div style={{ fontSize: '13px', fontWeight: '600', color: theme.colors.text }}>
-            + เพิ่มหมวดหมู่{activeTab === 'income' ? 'รายรับ' : 'รายจ่าย'}ใหม่
+            {editingCategory ? 'แก้ไขหมวดหมู่' : `+ เพิ่มหมวดหมู่${activeTab === 'income' ? 'รายรับ' : 'รายจ่าย'}ใหม่`}
           </div>
 
           <div>
@@ -286,9 +337,33 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
               marginTop: '4px',
             }}
           >
-            {isSubmitting ? 'กำลังเพิ่ม...' : 'เพิ่มหมวดหมู่'}
+            {isSubmitting ? 'กำลังบันทึก...' : editingCategory ? 'บันทึกการแก้ไข' : 'เพิ่มหมวดหมู่'}
           </button>
+          {editingCategory && (
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={isSubmitting}
+              style={{
+                padding: '9px 16px',
+                borderRadius: theme.radius.md,
+                border: `1px solid ${theme.colors.border}`,
+                backgroundColor: 'transparent',
+                color: theme.colors.textSecondary,
+                fontSize: '13px',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              ยกเลิก
+            </button>
+          )}
         </form>
+
+        {feedback && (
+          <div role="alert" style={{ color: '#f87171', fontSize: '12px', marginBottom: '14px' }}>
+            {feedback}
+          </div>
+        )}
 
         {/* Existing categories list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -297,7 +372,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
               ยังไม่มีหมวดหมู่อยู่ในรายการ
             </div>
           ) : (
-            currentCategories.map((cat) => (
+            currentCategories.map((cat, index) => (
               <div
                 key={cat.id}
                 style={{
@@ -334,20 +409,70 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
                   )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleDelete(cat.id, cat.name)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: theme.colors.textDim,
-                    cursor: 'pointer',
-                    padding: '4px',
-                  }}
-                  title="ลบหมวดหมู่"
-                >
-                  <Icon name="Trash2" size={15} color="currentColor" />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => void handleMoveCategory(cat, -1)}
+                    disabled={index === 0}
+                    aria-label={`เลื่อน ${cat.name} ขึ้น`}
+                    title="เลื่อนขึ้น"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: index === 0 ? theme.colors.textDim : theme.colors.textSecondary,
+                      cursor: index === 0 ? 'not-allowed' : 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <Icon name="ChevronUp" size={16} color="currentColor" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleMoveCategory(cat, 1)}
+                    disabled={index === currentCategories.length - 1}
+                    aria-label={`เลื่อน ${cat.name} ลง`}
+                    title="เลื่อนลง"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: index === currentCategories.length - 1 ? theme.colors.textDim : theme.colors.textSecondary,
+                      cursor: index === currentCategories.length - 1 ? 'not-allowed' : 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <Icon name="ChevronDown" size={16} color="currentColor" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleEditCategory(cat)}
+                    aria-label={`แก้ไข ${cat.name}`}
+                    title="แก้ไขหมวดหมู่"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: theme.colors.textSecondary,
+                      cursor: 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <Icon name="Pencil" size={15} color="currentColor" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(cat.id, cat.name)}
+                    aria-label={`ลบ ${cat.name}`}
+                    title="ลบหมวดหมู่"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: theme.colors.textDim,
+                      cursor: 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <Icon name="Trash2" size={15} color="currentColor" />
+                  </button>
+                </div>
               </div>
             ))
           )}
@@ -356,4 +481,3 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
     </div>
   );
 };
-

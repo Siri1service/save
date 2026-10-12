@@ -10,6 +10,7 @@ interface HeaderProps {
   onOpenInviteModal: () => void;
   onOpenCategoryModal: () => void;
   onOpenExportModal: () => void;
+  onOpenSettings: () => void;
   activeTab: 'dashboard' | 'transactions' | 'admin';
   setActiveTab: (tab: 'dashboard' | 'transactions' | 'admin') => void;
   themeMode: ThemeMode;
@@ -21,14 +22,40 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenInviteModal,
   onOpenCategoryModal,
   onOpenExportModal,
+  onOpenSettings,
   activeTab,
   setActiveTab,
   themeMode,
   onToggleTheme,
 }) => {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, logout, updateProfile } = useAuth();
   const { activeWorkspace } = useApp();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  const handleSaveProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const fullName = profileName.trim();
+    if (fullName.length < 2) {
+      setProfileFeedback('กรุณากรอกชื่ออย่างน้อย 2 ตัวอักษร');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setProfileFeedback(null);
+    try {
+      await updateProfile({ full_name: fullName });
+      setIsEditingProfile(false);
+    } catch (error) {
+      console.error('Failed to update profile name:', error);
+      setProfileFeedback(error instanceof Error ? error.message : 'แก้ไขชื่อผู้ใช้ไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   return (
     <header
@@ -198,6 +225,25 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Action Utilities & User Menu */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <button
+          onClick={onOpenSettings}
+          aria-label="การตั้งค่า"
+          title="การตั้งค่า"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '34px',
+            height: '34px',
+            backgroundColor: theme.colors.card,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.radius.full,
+            color: theme.colors.textSecondary,
+            cursor: 'pointer',
+          }}
+        >
+          <Icon name="Settings" size={16} color="currentColor" />
+        </button>
+        <button
           onClick={onToggleTheme}
           aria-label={themeMode === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
           title={themeMode === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
@@ -354,6 +400,62 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </div>
               </div>
+
+              {isEditingProfile ? (
+                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                  <label style={{ fontSize: '11px', color: theme.colors.textMuted }}>
+                    ชื่อที่แสดง
+                    <input
+                      value={profileName}
+                      onChange={(event) => setProfileName(event.target.value)}
+                      autoFocus
+                      required
+                      minLength={2}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        marginTop: '4px',
+                        padding: '8px',
+                        border: `1px solid ${theme.colors.border}`,
+                        borderRadius: theme.radius.sm,
+                        backgroundColor: theme.colors.elevated,
+                        color: theme.colors.text,
+                      }}
+                    />
+                  </label>
+                  {profileFeedback && <div role="alert" style={{ color: '#f87171', fontSize: '11px' }}>{profileFeedback}</div>}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button type="button" onClick={() => setIsEditingProfile(false)} disabled={isSavingProfile} style={{ flex: 1 }}>ยกเลิก</button>
+                    <button type="submit" disabled={isSavingProfile} style={{ flex: 1 }}>{isSavingProfile ? 'กำลังบันทึก...' : 'บันทึก'}</button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileName(user?.full_name || '');
+                    setProfileFeedback(null);
+                    setIsEditingProfile(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    marginTop: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px',
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${theme.colors.border}`,
+                    color: theme.colors.textSecondary,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    borderRadius: theme.radius.sm,
+                  }}
+                >
+                  <Icon name="Pencil" size={13} color="currentColor" />
+                  <span>แก้ไขชื่อผู้ใช้</span>
+                </button>
+              )}
 
               {/* Logout */}
               <button

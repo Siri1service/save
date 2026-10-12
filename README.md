@@ -12,12 +12,14 @@
 
 ### 2. 🎨 ดีไซน์สไตล์ Minimal & Modern
 - สลับธีม Dark/Light ได้ และจดจำธีมที่เลือกไว้ในอุปกรณ์
+- ตั้งค่าสีหลักของธีมได้หลายชุดจากเมนูการตั้งค่า
 - ธีมสี Monochromatic สบายตา เรียบหรู ตัดกับสีสถานะการเงิน (Emerald Green สำหรับรายรับ, Rose Red สำหรับรายจ่าย)
 - Typography สองภาษา (Prompt สำหรับภาษาไทย และ Inter สำหรับตัวเลข/ภาษาอังกฤษ)
 - Responsive Layout 100% ปรับมุมมองอัตโนมัติทั้งบนหน้าจอมือถือ แท็บเล็ต และคอมพิวเตอร์
 
 ### 3. 💼 แยกบัญชี "ส่วนบุคคล" และ "ร้านค้า" ใน User เดียวกัน (Multi-Workspace)
 - ใน 1 บัญชีผู้ใช้ สามารถสร้าง, สลับ, และลบ กระเป๋าเงินส่วนบุคคลและร้านค้า/ธุรกิจได้ไม่จำกัด
+- แก้ไขชื่อที่แสดงของผู้ใช้ในเมนูโปรไฟล์ และเจ้าของ workspace แก้ไขชื่อ/คำอธิบายกระเป๋าหรือร้านค้าได้
 - ป้องกันข้อมูลปะปนกันระหว่างเงินใช้จ่ายส่วนตัวกับเงินหมุนเวียนในธุรกิจ
 - มีการคำนวณและสรุปยอดคงเหลือสุทธิ (Net Balance), อัตราการออม (Savings Rate) และสัดส่วนกำไร (Margin) แยกตามบัญชี
 
@@ -29,13 +31,15 @@
   - **ผู้เข้าชม (Viewer)**: ดูสรุป สถิติ และส่งออกรายงาน (PDF/CSV) เท่านั้น ไม่สามารถแก้ไขข้อมูล
 
 ### 5. 🏷️ จัดการหมวดหมู่ได้อิสระ (Custom Categories)
-- เพิ่มและลบหมวดหมู่ของตนเองได้ตามต้องการ
+- เพิ่ม แก้ไขชื่อ สี ไอคอน และลบหมวดหมู่ของตนเองได้ตามต้องการ
+- เลื่อนลำดับหมวดหมู่รายรับและรายจ่ายขึ้นลงได้ โดยบันทึกลำดับแยกตาม workspace
 - ปรับแต่งสีและไอคอนประจำหมวดหมู่เพื่อการแสดงผลที่ชัดเจน
 - แยกหมวดหมู่ฝั่งรายรับและรายจ่ายอย่างเป็นระเบียบ
 
 ### 6. 📄 ส่งออกรายงานรูปแบบ PDF และ CSV (Export Reports)
 - **PDF Report**: จัดรูปแบบสไตล์ Financial Statement สวยงาม แสดงหัวกระดาษ, สรุปรายรับ-รายจ่าย, สัดส่วนคงเหลือ และตารางบันทึกรายการ
 - **CSV (Excel Ready)**: เข้ารหัสด้วย **UTF-8 BOM (`\uFEFF`)** ทำให้เปิดบน Microsoft Excel บน Windows และ Mac ได้ทันทีโดยที่ตัวอักษรภาษาไทยไม่เป็นภาษาต่างดาว
+- หน้าประวัติรองรับการแสดงรายการเพิ่มเติมอัตโนมัติเมื่อเลื่อนถึงท้ายรายการ
 
 ### 7. 🔐 ระบบสมัครสมาชิก & แยกบทบาท (User & Admin)
 - รองรับระบบ Login และ Register ด้วย Supabase Auth
@@ -121,9 +125,11 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 
 In Supabase **Authentication -> URL Configuration**, set the Site URL to the production domain and add `https://save-tau-eight.vercel.app/**` to Redirect URLs. Email signup must be enabled. Configure a custom SMTP provider in **Authentication -> SMTP Settings** for reliable delivery of confirmation links.
 
+To enable Google and Facebook sign-in, configure each OAuth application and provider credentials in Supabase **Authentication -> Providers**. Register the Supabase callback URL shown in the provider settings (typically `https://<project-ref>.supabase.co/auth/v1/callback`) in each OAuth provider's console, and add the app's production and local origins to Supabase **Authentication -> URL Configuration -> Redirect URLs**. The app requests the `email` scope for Facebook. Supabase Auth persists signed-in sessions in browser storage and refreshes tokens automatically; signing out explicitly removes the saved session.
+
 To make the trusted `siri1service@gmail.com` account an administrator, first sign up and confirm that email, then run `supabase/promote_siri1service_admin.sql` in the Supabase SQL Editor and sign in again. The public signup form cannot grant administrator access; never expose the Supabase service-role key in the app.
 
-If using an existing database, run `supabase/migrations/20261012_auth_access_control.sql` and then `supabase/migrations/20261012_workspace_invitations.sql` in the Supabase SQL Editor. The invitation migration is required for shared-workspace invitations, but login remains available if it has not yet been applied. For a new database, run the updated `supabase/schema.sql`. Workspace owners can invite an email as an editor or viewer; the invited person must sign up or log in using that same email to claim access to the shared workspace. If Supabase URL and anon key are not configured, signup and login stay disabled; the app no longer creates demo accounts.
+If using an existing database, run `supabase/migrations/20261012_auth_access_control.sql`, `supabase/migrations/20261012_workspace_invitations.sql`, `supabase/migrations/20261012_admin_transaction_cleanup.sql`, and `supabase/migrations/20261012_category_ordering.sql` in the Supabase SQL Editor. These migrations add access control, workspace invitations, admin cleanup, and category ordering/editing. For a new database, run the updated `supabase/schema.sql`. Workspace owners can invite an email as an editor or viewer; the invited person must sign up or log in using that same email to claim access to the shared workspace. Active admins can permanently delete income and expense transactions across all workspaces within an inclusive date range; every deletion requires explicit confirmation. Workspace editors and owners can edit categories and reorder them within their income or expense list. If Supabase URL and anon key are not configured, signup and login stay disabled; the app no longer creates demo accounts.
 
 ---
 

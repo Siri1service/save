@@ -6,7 +6,7 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { useTheme } from '../context/ThemeContext';
 
 export const AuthScreen: React.FC = () => {
-  const { login, signup, resendSignupConfirmation, authNotice } = useAuth();
+  const { login, loginWithProvider, signup, resendSignupConfirmation, authNotice } = useAuth();
   const { mode: themeMode, toggleTheme } = useTheme();
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -17,6 +17,7 @@ export const AuthScreen: React.FC = () => {
   const [canResendConfirmation, setCanResendConfirmation] = useState(false);
   const [isResendingConfirmation, setIsResendingConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [socialProvider, setSocialProvider] = useState<'google' | 'facebook' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +73,19 @@ export const AuthScreen: React.FC = () => {
       setFeedback({ type: 'error', message: 'ส่งอีเมลยืนยันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' });
     } finally {
       setIsResendingConfirmation(false);
+    }
+  };
+
+  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+    setFeedback(null);
+    setSocialProvider(provider);
+    try {
+      const result = await loginWithProvider(provider);
+      if (!result.success) {
+        setFeedback({ type: 'error', message: result.error || 'เข้าสู่ระบบไม่สำเร็จ' });
+      }
+    } finally {
+      setSocialProvider(null);
     }
   };
 
@@ -217,6 +231,58 @@ export const AuthScreen: React.FC = () => {
           </button>
         </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+          <button
+            type="button"
+            onClick={() => void handleSocialLogin('google')}
+            disabled={!isSupabaseConfigured || isSubmitting || socialProvider !== null}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '10px',
+              borderRadius: theme.radius.md,
+              border: `1px solid ${theme.colors.borderStrong}`,
+              backgroundColor: theme.colors.card,
+              color: theme.colors.text,
+              fontSize: '12px',
+              cursor: !isSupabaseConfigured || socialProvider !== null ? 'not-allowed' : 'pointer',
+              opacity: !isSupabaseConfigured || socialProvider !== null ? 0.6 : 1,
+            }}
+          >
+            <Icon name="Chrome" size={16} color="currentColor" />
+            {socialProvider === 'google' ? 'กำลังเชื่อมต่อ...' : 'Google'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSocialLogin('facebook')}
+            disabled={!isSupabaseConfigured || isSubmitting || socialProvider !== null}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '10px',
+              borderRadius: theme.radius.md,
+              border: '1px solid #1877f2',
+              backgroundColor: '#1877f2',
+              color: '#ffffff',
+              fontSize: '12px',
+              cursor: !isSupabaseConfigured || socialProvider !== null ? 'not-allowed' : 'pointer',
+              opacity: !isSupabaseConfigured || socialProvider !== null ? 0.6 : 1,
+            }}
+          >
+            <Icon name="Facebook" size={16} color="currentColor" />
+            {socialProvider === 'facebook' ? 'กำลังเชื่อมต่อ...' : 'Facebook'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', color: theme.colors.textMuted, fontSize: '11px' }}>
+          <span style={{ height: '1px', flex: 1, backgroundColor: theme.colors.border }} />
+          หรือเข้าสู่ระบบด้วยอีเมล
+          <span style={{ height: '1px', flex: 1, backgroundColor: theme.colors.border }} />
+        </div>
+
         {authNotice && (
           <div
             role="alert"
@@ -253,6 +319,11 @@ export const AuthScreen: React.FC = () => {
 
         {/* Form */}
         <form noValidate onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {mode === 'login' && (
+            <p style={{ fontSize: '11px', color: theme.colors.textMuted, marginBottom: '-4px' }}>
+              ระบบจะจดจำการเข้าสู่ระบบบนอุปกรณ์นี้จนกว่าคุณจะออกจากระบบ
+            </p>
+          )}
           {mode === 'signup' && (
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: theme.colors.textMuted, marginBottom: '6px' }}>

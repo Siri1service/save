@@ -12,6 +12,7 @@ import { WorkspaceModal } from './src/components/WorkspaceModal';
 import { InviteMemberModal } from './src/components/InviteMemberModal';
 import { CategoryModal } from './src/components/CategoryModal';
 import { ExportModal } from './src/components/ExportModal';
+import { SettingsModal } from './src/components/SettingsModal';
 import { Transaction } from './src/types';
 import { Icon } from './src/components/Icon';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -34,6 +35,7 @@ const MainApp: React.FC = () => {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -101,6 +103,7 @@ const MainApp: React.FC = () => {
         onOpenInviteModal={() => setIsInviteModalOpen(true)}
         onOpenCategoryModal={() => setIsCategoryModalOpen(true)}
         onOpenExportModal={() => setIsExportModalOpen(true)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
         themeMode={themeMode}
         onToggleTheme={toggleTheme}
       />
@@ -259,6 +262,11 @@ const MainApp: React.FC = () => {
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
       />
     </div>
   );

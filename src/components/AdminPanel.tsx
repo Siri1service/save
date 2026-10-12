@@ -10,6 +10,7 @@ export const AdminPanel: React.FC = () => {
     updateUserStatus,
     updateUserRole,
     deleteUser,
+    deleteTransactionsByDateRange,
     emailTemplates,
     emailLogs,
     sendEmailToUser,
@@ -27,7 +28,11 @@ export const AdminPanel: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
 
   // Active tab inside Admin Panel
-  const [adminTab, setAdminTab] = useState<'users' | 'email_logs'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'email_logs' | 'data_cleanup'>('users');
+  const [cleanupStartDate, setCleanupStartDate] = useState('');
+  const [cleanupEndDate, setCleanupEndDate] = useState('');
+  const [isCleaningData, setIsCleaningData] = useState(false);
+  const [cleanupFeedback, setCleanupFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Days calculation helper
   const getDaysSinceLastActive = (dateStr?: string) => {
@@ -55,6 +60,40 @@ export const AdminPanel: React.FC = () => {
   });
 
   const inactiveUsersCount = allUsers.filter((u) => getDaysSinceLastActive(u.last_sign_in_at) >= 90).length;
+
+  const handleDeleteHistoricalTransactions = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setCleanupFeedback(null);
+
+    if (!cleanupStartDate || !cleanupEndDate || cleanupStartDate > cleanupEndDate) {
+      setCleanupFeedback({ type: 'error', message: 'กรุณากำหนดวันที่เริ่มต้นและสิ้นสุดให้ถูกต้อง' });
+      return;
+    }
+
+    const dateRange = `${new Date(`${cleanupStartDate}T00:00:00`).toLocaleDateString('th-TH')} ถึง ${new Date(`${cleanupEndDate}T00:00:00`).toLocaleDateString('th-TH')}`;
+    if (!window.confirm(`ยืนยันลบรายการรายรับและรายจ่ายทุก workspace ระหว่างวันที่ ${dateRange} หรือไม่?\n\nการลบนี้ถาวรและไม่สามารถกู้คืนได้`)) {
+      return;
+    }
+
+    setIsCleaningData(true);
+    try {
+      const deletedCount = await deleteTransactionsByDateRange(cleanupStartDate, cleanupEndDate);
+      setCleanupFeedback({
+        type: 'success',
+        message: deletedCount > 0
+          ? `ลบรายการรายรับและรายจ่ายในทุก workspace จำนวน ${deletedCount.toLocaleString('th-TH')} รายการเรียบร้อยแล้ว`
+          : 'ไม่พบรายการในช่วงวันที่ที่เลือก จึงไม่มีข้อมูลถูกลบ',
+      });
+    } catch (error) {
+      console.error('Failed to delete historical transactions:', error);
+      setCleanupFeedback({
+        type: 'error',
+        message: error instanceof Error ? `ลบข้อมูลไม่สำเร็จ: ${error.message}` : 'ลบข้อมูลไม่สำเร็จ กรุณาลองใหม่',
+      });
+    } finally {
+      setIsCleaningData(false);
+    }
+  };
 
   // Open email modal for a specific user
   const handleOpenEmailModal = (user: UserProfile, defaultTemplateId: string = 'inactivity_90d') => {
@@ -257,6 +296,21 @@ export const AdminPanel: React.FC = () => {
           }}
         >
           ประวัติการส่ง Email ({emailLogs.length})
+        </button>
+        <button
+          onClick={() => setAdminTab('data_cleanup')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: theme.radius.md,
+            border: 'none',
+            fontSize: '13px',
+            fontWeight: adminTab === 'data_cleanup' ? '600' : '400',
+            backgroundColor: adminTab === 'data_cleanup' ? theme.colors.elevated : 'transparent',
+            color: adminTab === 'data_cleanup' ? '#f87171' : theme.colors.textSecondary,
+            cursor: 'pointer',
+          }}
+        >
+          ลบข้อมูลย้อนหลัง
         </button>
       </div>
 
@@ -534,7 +588,7 @@ export const AdminPanel: React.FC = () => {
             </div>
           </div>
         </>
-      ) : (
+      ) : adminTab === 'email_logs' ? (
         /* Email Logs Table */
         <div
           style={{
@@ -602,6 +656,110 @@ export const AdminPanel: React.FC = () => {
             </table>
           </div>
         </div>
+      ) : (
+        <section
+          style={{
+            backgroundColor: theme.colors.card,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.radius.xl,
+            padding: '20px',
+            maxWidth: '680px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '18px' }}>
+            <Icon name="AlertTriangle" size={20} color="#f87171" />
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: '600', color: theme.colors.text }}>
+                ลบรายการรายรับ-รายจ่ายย้อนหลัง
+              </h2>
+              <p style={{ fontSize: '12px', color: theme.colors.textMuted, marginTop: '5px', lineHeight: 1.6 }}>
+                ลบเฉพาะรายการธุรกรรมรายรับ-รายจ่ายของผู้ใช้ทุกคนในทุก workspace ระบุช่วงวันที่แบบรวมวันเริ่มต้นและวันสิ้นสุด โดยไม่ลบบัญชีผู้ใช้ กระเป๋า หรือหมวดหมู่ รายการที่ลบแล้วไม่สามารถกู้คืนได้
+              </p>
+            </div>
+          </div>
+
+          {cleanupFeedback && (
+            <div
+              role={cleanupFeedback.type === 'error' ? 'alert' : 'status'}
+              style={{
+                padding: '10px 12px',
+                borderRadius: theme.radius.md,
+                marginBottom: '14px',
+                backgroundColor: cleanupFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                color: cleanupFeedback.type === 'error' ? '#f87171' : '#34d399',
+                fontSize: '12px',
+                lineHeight: 1.6,
+              }}
+            >
+              {cleanupFeedback.message}
+            </div>
+          )}
+
+          <form onSubmit={handleDeleteHistoricalTransactions} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <label style={{ flex: '1 1 200px', fontSize: '12px', color: theme.colors.textSecondary }}>
+                ตั้งแต่วันที่
+                <input
+                  type="date"
+                  value={cleanupStartDate}
+                  onChange={(event) => setCleanupStartDate(event.target.value)}
+                  required
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: '6px',
+                    backgroundColor: theme.colors.elevated,
+                    border: `1px solid ${theme.colors.border}`,
+                    borderRadius: theme.radius.md,
+                    padding: '10px 12px',
+                    color: theme.colors.text,
+                  }}
+                />
+              </label>
+              <label style={{ flex: '1 1 200px', fontSize: '12px', color: theme.colors.textSecondary }}>
+                ถึงวันที่ (รวมวันสิ้นสุด)
+                <input
+                  type="date"
+                  value={cleanupEndDate}
+                  onChange={(event) => setCleanupEndDate(event.target.value)}
+                  required
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: '6px',
+                    backgroundColor: theme.colors.elevated,
+                    border: `1px solid ${theme.colors.border}`,
+                    borderRadius: theme.radius.md,
+                    padding: '10px 12px',
+                    color: theme.colors.text,
+                  }}
+                />
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={isCleaningData || !cleanupStartDate || !cleanupEndDate}
+              style={{
+                alignSelf: 'flex-start',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 16px',
+                border: '1px solid rgba(239, 68, 68, 0.45)',
+                borderRadius: theme.radius.md,
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                color: '#f87171',
+                fontSize: '13px',
+                fontWeight: '600',
+                cursor: isCleaningData || !cleanupStartDate || !cleanupEndDate ? 'not-allowed' : 'pointer',
+                opacity: isCleaningData || !cleanupStartDate || !cleanupEndDate ? 0.6 : 1,
+              }}
+            >
+              <Icon name="Trash2" size={15} color="currentColor" />
+              {isCleaningData ? 'กำลังลบข้อมูล...' : 'ลบรายการในช่วงวันที่'}
+            </button>
+          </form>
+        </section>
       )}
 
       {/* Email Dispatcher Modal */}
@@ -786,4 +944,3 @@ export const AdminPanel: React.FC = () => {
     </div>
   );
 };
-

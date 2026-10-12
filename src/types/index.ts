@@ -48,6 +48,7 @@ export interface Category {
   type: TransactionType;
   icon: string;
   color: string;
+  sort_order?: number;
   is_default?: boolean;
   created_at?: string;
 }

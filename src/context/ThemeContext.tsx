@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState } from 'react';
-import { applyTheme, ThemeMode } from '../lib/theme';
+import { applyTheme, ThemeAccent, ThemeMode } from '../lib/theme';
 
 interface ThemeContextValue {
   mode: ThemeMode;
+  accent: ThemeAccent;
+  setMode: (mode: ThemeMode) => void;
+  setAccent: (accent: ThemeAccent) => void;
   toggleTheme: () => void;
 }
 
@@ -13,22 +16,38 @@ const getSavedTheme = (): ThemeMode => {
   return savedTheme === 'light' ? 'light' : 'dark';
 };
 
+const getSavedAccent = (): ThemeAccent => {
+  const savedAccent = localStorage.getItem('save_app_theme_accent');
+  return savedAccent === 'blue' || savedAccent === 'green' || savedAccent === 'purple'
+    || savedAccent === 'rose' || savedAccent === 'amber' ? savedAccent : 'mono';
+};
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [accent, setAccentState] = useState<ThemeAccent>(() => getSavedAccent());
   const [mode, setMode] = useState<ThemeMode>(() => {
     const initialMode = getSavedTheme();
-    applyTheme(initialMode);
+    applyTheme(initialMode, getSavedAccent());
     return initialMode;
   });
 
-  const toggleTheme = () => {
-    const nextMode: ThemeMode = mode === 'dark' ? 'light' : 'dark';
-    applyTheme(nextMode);
+  const changeMode = (nextMode: ThemeMode) => {
+    applyTheme(nextMode, accent);
     localStorage.setItem('save_app_theme', nextMode);
     setMode(nextMode);
   };
 
+  const changeAccent = (nextAccent: ThemeAccent) => {
+    applyTheme(mode, nextAccent);
+    localStorage.setItem('save_app_theme_accent', nextAccent);
+    setAccentState(nextAccent);
+  };
+
+  const toggleTheme = () => {
+    changeMode(mode === 'dark' ? 'light' : 'dark');
+  };
+
   return (
-    <ThemeContext.Provider value={{ mode, toggleTheme }}>
+    <ThemeContext.Provider value={{ mode, accent, setMode: changeMode, setAccent: changeAccent, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

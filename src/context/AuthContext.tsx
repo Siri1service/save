@@ -15,6 +15,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<AuthResult>;
+  loginWithProvider: (provider: 'google' | 'facebook') => Promise<AuthResult>;
   signup: (email: string, fullName: string, password: string) => Promise<AuthResult>;
   resendSignupConfirmation: (email: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
@@ -150,6 +151,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginWithProvider = async (provider: 'google' | 'facebook'): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'ระบบยังไม่ได้เชื่อมต่อ Supabase กรุณาตั้งค่าก่อนเข้าสู่ระบบ' };
+    }
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: window.location.origin,
+          ...(provider === 'facebook' ? { scopes: 'email' } : {}),
+        },
+      });
+      if (error) throw error;
+      return { success: true, message: 'กำลังเชื่อมต่อไปยังผู้ให้บริการเข้าสู่ระบบ...' };
+    } catch (error) {
+      console.error(`Sign-in with ${provider} failed:`, error);
+      return {
+        success: false,
+        error: `เข้าสู่ระบบด้วย ${provider === 'google' ? 'Google' : 'Facebook'} ไม่สำเร็จ: ${getErrorMessage(error, 'กรุณาตรวจสอบการตั้งค่า Supabase')}`,
+      };
+    }
+  };
+
   const signup = async (email: string, fullName: string, password: string): Promise<AuthResult> => {
     if (!isSupabaseConfigured) {
       return { success: false, error: 'ระบบยังไม่ได้เชื่อมต่อ Supabase กรุณาตั้งค่าในไฟล์ .env ก่อนสมัครสมาชิก' };
@@ -242,6 +267,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAdmin,
       isLoading,
       login,
+      loginWithProvider,
       signup,
       resendSignupConfirmation,
       logout,
