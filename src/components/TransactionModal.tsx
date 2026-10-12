@@ -96,8 +96,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
       onClose();
     } catch (err) {
-      console.error(err);
-      alert('เกิดข้อผิดพลาดในการบันทึก');
+      console.error('Failed to save transaction:', err);
+      alert(err instanceof Error ? `บันทึกข้อมูลไม่สำเร็จ: ${err.message}` : 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่');
     } finally {
       setIsSubmitting(false);
     }
@@ -106,8 +106,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const handleDelete = async () => {
     if (!editingTransaction) return;
     if (confirm('ยืนยันการลบรายการนี้?')) {
-      await deleteTransaction(editingTransaction.id);
-      onClose();
+      try {
+        await deleteTransaction(editingTransaction.id);
+        onClose();
+      } catch (err) {
+        console.error('Failed to delete transaction:', err);
+        alert(err instanceof Error ? `ลบข้อมูลไม่สำเร็จ: ${err.message}` : 'ลบข้อมูลไม่สำเร็จ กรุณาลองใหม่');
+      }
     }
   };
 
@@ -459,4 +464,3 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     </div>
   );
 };
-

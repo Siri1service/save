@@ -5,18 +5,21 @@ import { Icon } from '../components/Icon';
 import { isSupabaseConfigured } from '../lib/supabase';
 
 export const AuthScreen: React.FC = () => {
-  const { login, signup, authNotice } = useAuth();
+  const { login, signup, resendSignupConfirmation, authNotice } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
+  const [isResendingConfirmation, setIsResendingConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
+    setCanResendConfirmation(false);
 
     const normalizedEmail = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -40,11 +43,33 @@ export const AuthScreen: React.FC = () => {
       setFeedback(result.success
         ? { type: 'success', message: result.message || (mode === 'login' ? 'เข้าสู่ระบบสำเร็จ' : 'สมัครสมาชิกสำเร็จ') }
         : { type: 'error', message: result.error || 'ไม่สามารถดำเนินการได้ กรุณาลองใหม่อีกครั้ง' });
+      setCanResendConfirmation(Boolean(result.requiresEmailConfirmation));
     } catch (error) {
       console.error('Authentication request failed:', error);
       setFeedback({ type: 'error', message: 'เกิดข้อผิดพลาดระหว่างเชื่อมต่อ กรุณาลองใหม่อีกครั้ง' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setFeedback({ type: 'error', message: 'กรุณากรอกอีเมลที่ใช้สมัครก่อนส่งลิงก์ยืนยันอีกครั้ง' });
+      return;
+    }
+
+    setIsResendingConfirmation(true);
+    try {
+      const result = await resendSignupConfirmation(normalizedEmail);
+      setFeedback(result.success
+        ? { type: 'success', message: result.message || 'ส่งอีเมลยืนยันอีกครั้งแล้ว' }
+        : { type: 'error', message: result.error || 'ส่งอีเมลยืนยันไม่สำเร็จ' });
+    } catch (error) {
+      console.error('Failed to resend signup confirmation:', error);
+      setFeedback({ type: 'error', message: 'ส่งอีเมลยืนยันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' });
+    } finally {
+      setIsResendingConfirmation(false);
     }
   };
 
@@ -129,6 +154,7 @@ export const AuthScreen: React.FC = () => {
             onClick={() => {
               setMode('login');
               setFeedback(null);
+              setCanResendConfirmation(false);
             }}
             style={{
               flex: 1,
@@ -149,6 +175,7 @@ export const AuthScreen: React.FC = () => {
             onClick={() => {
               setMode('signup');
               setFeedback(null);
+              setCanResendConfirmation(false);
             }}
             style={{
               flex: 1,
@@ -305,6 +332,27 @@ export const AuthScreen: React.FC = () => {
               : 'สมัครเป็นผู้ใช้งาน'}
           </button>
         </form>
+
+        {canResendConfirmation && (
+          <button
+            type="button"
+            onClick={handleResendConfirmation}
+            disabled={isResendingConfirmation || !isSupabaseConfigured}
+            style={{
+              width: '100%',
+              marginTop: '12px',
+              padding: '10px',
+              borderRadius: theme.radius.md,
+              border: `1px solid ${theme.colors.border}`,
+              backgroundColor: 'transparent',
+              color: theme.colors.textSecondary,
+              fontSize: '12px',
+              cursor: isResendingConfirmation ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isResendingConfirmation ? 'กำลังส่งอีเมล...' : 'ส่งอีเมลยืนยันอีกครั้ง'}
+          </button>
+        )}
 
       </div>
     </div>

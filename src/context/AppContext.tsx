@@ -176,16 +176,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (isSupabaseConfigured) {
       const fetchWorkspaceDetails = async () => {
-        const { data: cats } = await supabase.from('categories').select('*').eq('workspace_id', activeWorkspaceId);
-        if (cats) setCategories(cats);
+        const [categoriesResult, transactionsResult, membersResult] = await Promise.all([
+          supabase.from('categories').select('*').eq('workspace_id', activeWorkspaceId),
+          supabase.from('transactions').select('*').eq('workspace_id', activeWorkspaceId).order('date', { ascending: false }),
+          supabase.from('workspace_members').select('*').eq('workspace_id', activeWorkspaceId),
+        ]);
 
-        const { data: txs } = await supabase.from('transactions').select('*').eq('workspace_id', activeWorkspaceId).order('date', { ascending: false });
-        if (txs) setTransactions(txs);
+        if (categoriesResult.error) throw categoriesResult.error;
+        if (transactionsResult.error) throw transactionsResult.error;
+        if (membersResult.error) throw membersResult.error;
 
-        const { data: mems } = await supabase.from('workspace_members').select('*').eq('workspace_id', activeWorkspaceId);
-        if (mems) setMembers(mems);
+        const workspaceCategories = categoriesResult.data || [];
+        setCategories((previous) => [
+          ...previous.filter((category) => category.workspace_id !== activeWorkspaceId),
+          ...workspaceCategories,
+        ]);
+        const categoryById = new Map(workspaceCategories.map((category) => [category.id, category]));
+        const workspaceTransactions = (transactionsResult.data || []).map((transaction) => {
+          const category = categoryById.get(transaction.category_id);
+          return {
+            ...transaction,
+            amount: Number(transaction.amount),
+            category_name: category?.name,
+            category_color: category?.color,
+          };
+        });
+        setTransactions((previous) => [
+          ...previous.filter((transaction) => transaction.workspace_id !== activeWorkspaceId),
+          ...workspaceTransactions,
+        ]);
+        setMembers((previous) => [
+          ...previous.filter((member) => member.workspace_id !== activeWorkspaceId),
+          ...(membersResult.data || []),
+        ]);
       };
-      fetchWorkspaceDetails();
+      void fetchWorkspaceDetails().catch((error) => {
+        console.error('Failed to load workspace data:', error);
+      });
     }
   }, [activeWorkspaceId]);
 
@@ -225,11 +252,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         description,
         currency: 'THB',
       }).select().single();
-      if (!error && data) {
-        setWorkspaces((prev) => [data, ...prev]);
-        setActiveWorkspaceId(data.id);
-        return data;
-      }
+      if (error) throw error;
+      if (!data) throw new Error('ไม่พบข้อมูลกระเป๋าที่บันทึก');
+      setWorkspaces((prev) => [data, ...prev]);
+      setActiveWorkspaceId(data.id);
+      return data;
     }
 
     // Default categories for new workspace
@@ -265,7 +292,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (isSupabaseConfigured) {
-      await supabase.from('workspaces').delete().eq('id', id);
+      const { error } = await supabase.from('workspaces').delete().eq('id', id);
+      if (error) throw error;
     }
 
     const updatedWorkspaces = workspaces.filter((w) => w.id !== id);
@@ -347,7 +375,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     if (isSupabaseConfigured) {
-      await supabase.from('categories').insert(newCat);
+      const { data, error } = await supabase.from('categories').insert({
+        workspace_id: activeWorkspaceId,
+        name,
+        type,
+        icon,
+        color,
+        is_default: false,
+      }).select().single();
+      if (error) throw error;
+      if (!data) throw new Error('ไม่พบข้อมูลหมวดหมู่ที่บันทึก');
+      setCategories((previous) => [...previous, data]);
+      return;
     }
 
     const updated = [...categories, newCat];
@@ -357,7 +396,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateCategory = async (id: string, updates: Partial<Category>) => {
     if (isSupabaseConfigured) {
-      await supabase.from('categories').update(updates).eq('id', id);
+      const { id: _id, workspace_id: _workspaceId, created_at: _createdAt, ...categoryUpdates } = updates;
+      const { data, error } = await supabase
+        .from('categories')
+        .update(categoryUpdates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      if (!data) throw new Error('ไม่พบหมวดหมู่ที่ต้องการแก้ไข');
+      setCategories((previous) => previous.map((category) => (category.id === id ? data : category)));
+      return;
     }
     const updated = categories.map((c) => (c.id === id ? { ...c, ...updates } : c));
     setCategories(updated);
@@ -366,7 +415,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteCategory = async (id: string) => {
     if (isSupabaseConfigured) {
-      await supabase.from('categories').delete().eq('id', id);
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) throw error;
     }
     const updated = categories.filter((c) => c.id !== id);
     setCategories(updated);
@@ -377,7 +427,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTransaction = async (data: Omit<Transaction, 'id' | 'workspace_id' | 'created_at'>) => {
     if (!activeWorkspaceId) return;
 
-    const matchedCat = categories.find((c) => c.id === data.category_id);
+    const matchedCat = categories.find((category) => category.id === data.category_id);
+    if (isSupabaseConfigured && (!matchedCat || matchedCat.workspace_id !== activeWorkspaceId)) {
+      throw new Error('กรุณาเลือกหมวดหมู่ของกระเป๋าปัจจุบัน');
+    }
     const newTx: Transaction = {
       ...data,
       id: `tx-${Date.now()}`,
@@ -389,7 +442,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     if (isSupabaseConfigured) {
-      await supabase.from('transactions').insert(newTx);
+      const { data: savedTransaction, error } = await supabase.from('transactions').insert({
+        workspace_id: activeWorkspaceId,
+        category_id: data.category_id || null,
+        type: data.type,
+        amount: data.amount,
+        date: data.date,
+        title: data.title,
+        notes: data.notes || null,
+        receipt_url: data.receipt_url || null,
+        created_by: user?.id || null,
+      }).select().single();
+      if (error) throw error;
+      if (!savedTransaction) throw new Error('ไม่พบรายการที่บันทึก');
+      setTransactions((previous) => [{
+        ...savedTransaction,
+        amount: Number(savedTransaction.amount),
+        category_name: matchedCat?.name,
+        category_color: matchedCat?.color,
+      }, ...previous]);
+      return;
     }
 
     const updated = [newTx, ...transactions];
@@ -399,7 +471,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateTransaction = async (id: string, updates: Partial<Transaction>) => {
     if (isSupabaseConfigured) {
-      await supabase.from('transactions').update(updates).eq('id', id);
+      const { id: _id, workspace_id: _workspaceId, created_at: _createdAt, category_name: _categoryName, category_icon: _categoryIcon, category_color: _categoryColor, ...transactionUpdates } = updates;
+      const { data, error } = await supabase
+        .from('transactions')
+        .update(transactionUpdates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      if (!data) throw new Error('ไม่พบรายการที่ต้องการแก้ไข');
+      const category = categories.find((item) => item.id === data.category_id);
+      setTransactions((previous) => previous.map((transaction) => (
+        transaction.id === id
+          ? { ...data, amount: Number(data.amount), category_name: category?.name, category_color: category?.color }
+          : transaction
+      )));
+      return;
     }
     const updated = transactions.map((t) => (t.id === id ? { ...t, ...updates } : t));
     setTransactions(updated);
@@ -408,7 +495,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteTransaction = async (id: string) => {
     if (isSupabaseConfigured) {
-      await supabase.from('transactions').delete().eq('id', id);
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (error) throw error;
     }
     const updated = transactions.filter((t) => t.id !== id);
     setTransactions(updated);

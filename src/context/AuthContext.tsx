@@ -6,6 +6,7 @@ interface AuthResult {
   success: boolean;
   error?: string;
   message?: string;
+  requiresEmailConfirmation?: boolean;
 }
 
 interface AuthContextType {
@@ -15,6 +16,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<AuthResult>;
   signup: (email: string, fullName: string, password: string) => Promise<AuthResult>;
+  resendSignupConfirmation: (email: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
 }
@@ -23,6 +25,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string') {
+    return error.code;
+  }
+  return undefined;
 }
 
 async function loadActiveProfile(authUserId: string): Promise<UserProfile> {
@@ -108,6 +117,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw profileError;
       }
     } catch (error) {
+      if (getErrorCode(error) === 'email_not_confirmed') {
+        return {
+          success: false,
+          error: 'อีเมลนี้ยังไม่ได้รับการยืนยัน กรุณากดลิงก์ยืนยันที่ส่งไปทางอีเมลก่อนเข้าสู่ระบบ',
+          requiresEmailConfirmation: true,
+        };
+      }
       return { success: false, error: getErrorMessage(error, 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบอีเมลและรหัสผ่าน') };
     } finally {
       setIsLoading(false);
@@ -125,7 +141,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: {
+          data: { full_name: fullName },
+          emailRedirectTo: window.location.origin,
+        },
       });
       if (error) throw error;
 
@@ -144,11 +163,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return {
         success: true,
         message: 'สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมลและยืนยันบัญชีก่อนเข้าสู่ระบบ',
+        requiresEmailConfirmation: true,
       };
     } catch (error) {
       return { success: false, error: getErrorMessage(error, 'สมัครสมาชิกไม่สำเร็จ กรุณาตรวจสอบข้อมูลแล้วลองใหม่') };
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const resendSignupConfirmation = async (email: string): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'ระบบยังไม่ได้เชื่อมต่อ Supabase กรุณาตั้งค่าระบบก่อนส่งอีเมลยืนยัน' };
+    }
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (error) throw error;
+      return { success: true, message: 'ส่งอีเมลยืนยันอีกครั้งแล้ว กรุณาตรวจสอบกล่องจดหมายและโฟลเดอร์สแปม' };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error, 'ส่งอีเมลยืนยันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง') };
     }
   };
 
@@ -175,7 +213,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = user?.role === 'admin' && user.status === 'active';
 
   return (
-    <AuthContext.Provider value={{ user, authNotice, isAdmin, isLoading, login, signup, logout, updateProfile }}>
+    <AuthContext.Provider value={{
+      user,
+      authNotice,
+      isAdmin,
+      isLoading,
+      login,
+      signup,
+      resendSignupConfirmation,
+      logout,
+      updateProfile,
+    }}>
       {children}
     </AuthContext.Provider>
   );
