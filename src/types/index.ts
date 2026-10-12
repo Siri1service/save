@@ -90,3 +90,4 @@ export interface EmailTemplate {
 }
 
 export type FilterPeriod = 'today' | 'week' | 'month' | 'year' | 'all' | 'custom';
+

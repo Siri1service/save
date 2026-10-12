@@ -38,8 +38,9 @@
 
 ### 7. 🔐 ระบบสมัครสมาชิก & แยกบทบาท (User & Admin)
 - รองรับระบบ Login และ Register ด้วย Supabase Auth
-- แยกประสบการณ์การใช้งานระหว่าง **ผู้ใช้งานทั่วไป (User)** และ **ผู้ดูแลระบบ (Admin)**
-- มีปุ่มสลับบทบาท Demo Switch สำหรับการทดสอบฟีเจอร์ได้ทันที
+- ผู้สมัครใหม่ได้รับสิทธิ์ **ผู้ใช้งานทั่วไป (User)** เท่านั้น
+- สิทธิ์ **ผู้ดูแลระบบ (Admin)** กำหนดได้โดยผู้ดูแลระบบในฐานข้อมูลเท่านั้น
+- ตรวจสอบสถานะบัญชีก่อนเข้าสู่ระบบ และปฏิเสธบัญชีที่ถูกระงับ
 
 ### 8. 🛡️ แผงควบคุมสำหรับผู้ดูแลระบบ (Admin Dashboard) & ระบบ Email
 - **จัดการผู้ใช้ (User Management)**: ค้นหา, ดูรายชื่อ, สลับสถานะ (Active / Suspended), แก้ไขบทบาท (User / Admin) และลบผู้ใช้
@@ -87,7 +88,7 @@ npm run build
    - **Framework Preset**: Vite
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
-5. ในแท็บ **Environment Variables** ให้ใส่ค่าจาก Supabase (ถ้ามี):
+5. ในแท็บ **Environment Variables** ให้ใส่ค่าจริงจาก Supabase (จำเป็นสำหรับสมัครสมาชิกและเข้าสู่ระบบ):
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
 6. กด **Deploy**
@@ -117,7 +118,9 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
-*(หมายเหตุ: หากยังไม่ได้ใส่ค่า Supabase ตัวแอปพลิเคชันจะทำงานใน **Demo Mode** ที่มีข้อมูลจำลองครบทุกกรณี สามารถทดสอบสร้าง ลบ สลับบัญชี และส่งออก PDF ได้ทันที)*
+When deploying, create the first administrator account through Supabase Auth, then assign `profiles.role = 'admin'` to that trusted account in the Supabase SQL Editor. The public signup form cannot grant administrator access.
+
+If using an existing database, run `supabase/migrations/20261012_auth_access_control.sql` in the Supabase SQL Editor before enabling the app. For a new database, run the updated `supabase/schema.sql`. If Supabase URL and anon key are not configured, signup and login stay disabled; the app no longer creates demo accounts.
 
 ---
 

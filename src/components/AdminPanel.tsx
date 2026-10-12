@@ -786,3 +786,4 @@ export const AdminPanel: React.FC = () => {
     </div>
   );
 };
+

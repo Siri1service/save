@@ -300,3 +300,4 @@ export const INITIAL_EMAIL_LOGS: EmailLog[] = [
     created_at: new Date(Date.now() - 3600000).toISOString(),
   },
 ];
+

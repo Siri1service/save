@@ -21,7 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
 }) => {
-  const { user, isAdmin, logout, switchDemoRole } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const { activeWorkspace } = useApp();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -330,56 +330,16 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
-              {/* Quick Role Switch for Demo/Testing */}
-              <div style={{ padding: '8px 0', borderBottom: `1px solid ${theme.colors.border}` }}>
-                <div style={{ fontSize: '11px', color: theme.colors.textDim, marginBottom: '6px' }}>
-                  สลับบทบาททดสอบ (Demo Switch):
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    onClick={() => {
-                      switchDemoRole('user');
-                      setShowUserMenu(false);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '4px',
-                      fontSize: '11px',
-                      borderRadius: theme.radius.sm,
-                      border: `1px solid ${!isAdmin ? '#10b981' : theme.colors.border}`,
-                      backgroundColor: !isAdmin ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                      color: !isAdmin ? '#10b981' : theme.colors.textMuted,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    User
-                  </button>
-                  <button
-                    onClick={() => {
-                      switchDemoRole('admin');
-                      setShowUserMenu(false);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '4px',
-                      fontSize: '11px',
-                      borderRadius: theme.radius.sm,
-                      border: `1px solid ${isAdmin ? '#6366f1' : theme.colors.border}`,
-                      backgroundColor: isAdmin ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
-                      color: isAdmin ? '#a5b4fc' : theme.colors.textMuted,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Admin
-                  </button>
-                </div>
-              </div>
-
               {/* Logout */}
               <button
-                onClick={() => {
-                  logout();
-                  setShowUserMenu(false);
+                onClick={async () => {
+                  try {
+                    await logout();
+                    setShowUserMenu(false);
+                  } catch (error) {
+                    console.error('Failed to sign out:', error);
+                    alert('ออกจากระบบไม่สำเร็จ กรุณาลองอีกครั้ง');
+                  }
                 }}
                 style={{
                   width: '100%',

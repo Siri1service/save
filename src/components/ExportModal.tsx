@@ -19,7 +19,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
 
   const targetTransactions = dataScope === 'filtered' ? filteredTransactions : transactions.filter((t) => t.workspace_id === activeWorkspace.id);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (targetTransactions.length === 0) {
       alert('ไม่มีรายการข้อมูลสำหรับส่งออก');
       return;
@@ -27,13 +27,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
 
     const periodName = dataScope === 'filtered' ? `ช่วง_${period}` : 'ทั้งหมด';
 
-    if (format === 'csv') {
-      exportToCSV(targetTransactions, activeWorkspace, periodName);
-    } else {
-      exportToPDF(targetTransactions, activeWorkspace, periodName);
+    try {
+      if (format === 'csv') {
+        exportToCSV(targetTransactions, activeWorkspace, periodName);
+      } else {
+        await exportToPDF(targetTransactions, activeWorkspace, periodName);
+      }
+      onClose();
+    } catch (error) {
+      console.error('Failed to export report:', error);
+      alert('ไม่สามารถส่งออกรายงานได้ กรุณาลองใหม่อีกครั้ง');
     }
-
-    onClose();
   };
 
   return (

@@ -18,3 +18,4 @@ export const Icon: React.FC<IconProps> = ({ name, size = 20, color = '#ffffff', 
     </span>
   );
 };
+

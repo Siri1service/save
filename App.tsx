@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AppProvider, useApp } from './src/context/AppContext';
 import { theme } from './src/lib/theme';
@@ -20,6 +20,10 @@ const MainApp: React.FC = () => {
 
   // Active Main Tab
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'admin'>('dashboard');
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'admin') setActiveTab('dashboard');
+  }, [activeTab, isAdmin]);
 
   // Modals state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);

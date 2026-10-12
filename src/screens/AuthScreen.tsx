@@ -5,40 +5,44 @@ import { Icon } from '../components/Icon';
 import { isSupabaseConfigured } from '../lib/supabase';
 
 export const AuthScreen: React.FC = () => {
-  const { login, signup, switchDemoRole } = useAuth();
+  const { login, signup, authNotice } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [roleType, setRoleType] = useState<'user' | 'admin'>('user');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage('');
-    if (!email.trim() || !email.includes('@')) {
-      setErrorMessage('กรุณากรอก Email ให้ถูกต้อง');
+    setFeedback(null);
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setFeedback({ type: 'error', message: 'กรุณากรอกอีเมลให้ถูกต้อง เช่น name@example.com' });
+      return;
+    }
+    if (password.length < 8) {
+      setFeedback({ type: 'error', message: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร' });
+      return;
+    }
+    if (mode === 'signup' && fullName.trim().length < 2) {
+      setFeedback({ type: 'error', message: 'กรุณากรอกชื่อ-นามสกุลอย่างน้อย 2 ตัวอักษร' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      if (mode === 'login') {
-        const res = await login(email.trim(), password, roleType === 'admin');
-        if (!res.success) setErrorMessage(res.error || 'เข้าสู่ระบบไม่สำเร็จ');
-      } else {
-        if (!fullName.trim()) {
-          setErrorMessage('กรุณากรอกชื่อ-นามสกุล');
-          setIsSubmitting(false);
-          return;
-        }
-        const res = await signup(email.trim(), fullName.trim(), password, roleType === 'admin');
-        if (!res.success) setErrorMessage(res.error || 'สมัครสมาชิกไม่สำเร็จ');
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'เกิดข้อผิดพลาด');
+      const result = mode === 'login'
+        ? await login(normalizedEmail, password)
+        : await signup(normalizedEmail, fullName.trim(), password);
+      setFeedback(result.success
+        ? { type: 'success', message: result.message || (mode === 'login' ? 'เข้าสู่ระบบสำเร็จ' : 'สมัครสมาชิกสำเร็จ') }
+        : { type: 'error', message: result.error || 'ไม่สามารถดำเนินการได้ กรุณาลองใหม่อีกครั้ง' });
+    } catch (error) {
+      console.error('Authentication request failed:', error);
+      setFeedback({ type: 'error', message: 'เกิดข้อผิดพลาดระหว่างเชื่อมต่อ กรุณาลองใหม่อีกครั้ง' });
     } finally {
       setIsSubmitting(false);
     }
@@ -96,80 +100,35 @@ export const AuthScreen: React.FC = () => {
             SAVE
           </h1>
           <p style={{ fontSize: '13px', color: theme.colors.textMuted, margin: 0 }}>
-            Minimal & Modern Expense Management
+            Beta version 0.1.0 © Siri.DEV
           </p>
 
           {!isSupabaseConfigured && (
             <div
               style={{
                 marginTop: '12px',
-                padding: '6px 12px',
-                borderRadius: theme.radius.full,
-                backgroundColor: 'rgba(99, 102, 241, 0.12)',
-                color: '#a5b4fc',
+                padding: '10px 12px',
+                borderRadius: theme.radius.md,
+                backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                color: '#fbbf24',
                 fontSize: '11px',
-                display: 'inline-block',
+                lineHeight: 1.6,
               }}
+              role="status"
             >
-              โหมดทดสอบ (Demo Mode พร้อมใช้งานทันที)
+              ระบบยังไม่พร้อมเข้าสู่ระบบจริง กรุณาตั้งค่า VITE_SUPABASE_URL และ VITE_SUPABASE_ANON_KEY ในไฟล์ .env แล้วเริ่มระบบใหม่
             </div>
           )}
-        </div>
-
-        {/* Role Segmented Switch (User vs Admin Login) */}
-        <div
-          style={{
-            display: 'flex',
-            backgroundColor: theme.colors.elevated,
-            padding: '3px',
-            borderRadius: theme.radius.full,
-            marginBottom: '20px',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setRoleType('user')}
-            style={{
-              flex: 1,
-              padding: '8px',
-              borderRadius: theme.radius.full,
-              border: 'none',
-              fontSize: '13px',
-              fontWeight: roleType === 'user' ? '600' : '400',
-              backgroundColor: roleType === 'user' ? theme.colors.card : 'transparent',
-              color: roleType === 'user' ? theme.colors.text : theme.colors.textSecondary,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            ผู้ใช้งานทั่วไป (User)
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleType('admin')}
-            style={{
-              flex: 1,
-              padding: '8px',
-              borderRadius: theme.radius.full,
-              border: 'none',
-              fontSize: '13px',
-              fontWeight: roleType === 'admin' ? '600' : '400',
-              backgroundColor: roleType === 'admin' ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
-              color: roleType === 'admin' ? '#c7d2fe' : theme.colors.textSecondary,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            ผู้ดูแลระบบ (Admin)
-          </button>
         </div>
 
         {/* Mode Toggle (Login vs Signup) */}
         <div style={{ display: 'flex', borderBottom: `1px solid ${theme.colors.border}`, marginBottom: '20px' }}>
           <button
+            type="button"
             onClick={() => {
               setMode('login');
-              setErrorMessage('');
+              setFeedback(null);
             }}
             style={{
               flex: 1,
@@ -186,9 +145,10 @@ export const AuthScreen: React.FC = () => {
             เข้าสู่ระบบ
           </button>
           <button
+            type="button"
             onClick={() => {
               setMode('signup');
-              setErrorMessage('');
+              setFeedback(null);
             }}
             style={{
               flex: 1,
@@ -206,9 +166,9 @@ export const AuthScreen: React.FC = () => {
           </button>
         </div>
 
-        {/* Error notification */}
-        {errorMessage && (
+        {authNotice && (
           <div
+            role="alert"
             style={{
               backgroundColor: 'rgba(239, 68, 68, 0.15)',
               border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -219,12 +179,29 @@ export const AuthScreen: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            {errorMessage}
+            {authNotice}
+          </div>
+        )}
+
+        {feedback && (
+          <div
+            role={feedback.type === 'error' ? 'alert' : 'status'}
+            style={{
+              backgroundColor: feedback.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.12)',
+              border: `1px solid ${feedback.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+              borderRadius: theme.radius.md,
+              padding: '10px 14px',
+              color: feedback.type === 'error' ? '#f87171' : '#34d399',
+              fontSize: '12px',
+              marginBottom: '16px',
+            }}
+          >
+            {feedback.message}
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form noValidate onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {mode === 'signup' && (
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: theme.colors.textMuted, marginBottom: '6px' }}>
@@ -232,6 +209,7 @@ export const AuthScreen: React.FC = () => {
               </label>
               <input
                 type="text"
+                autoComplete="name"
                 placeholder="สมชาย ใจดี"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -257,7 +235,8 @@ export const AuthScreen: React.FC = () => {
             </label>
             <input
               type="email"
-              placeholder={roleType === 'admin' ? 'admin@save.app' : 'user@example.com'}
+              autoComplete="email"
+              placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -277,13 +256,16 @@ export const AuthScreen: React.FC = () => {
 
           <div>
             <label style={{ display: 'block', fontSize: '12px', color: theme.colors.textMuted, marginBottom: '6px' }}>
-              รหัสผ่าน (Password)
+              รหัสผ่าน (อย่างน้อย 8 ตัวอักษร) *
             </label>
             <input
               type="password"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
               style={{
                 width: '100%',
                 backgroundColor: theme.colors.elevated,
@@ -300,7 +282,7 @@ export const AuthScreen: React.FC = () => {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isSupabaseConfigured}
             style={{
               width: '100%',
               padding: '12px',
@@ -310,7 +292,8 @@ export const AuthScreen: React.FC = () => {
               color: theme.colors.primaryText,
               fontSize: '14px',
               fontWeight: '600',
-              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              cursor: isSubmitting || !isSupabaseConfigured ? 'not-allowed' : 'pointer',
+              opacity: !isSupabaseConfigured ? 0.55 : 1,
               marginTop: '6px',
               transition: 'opacity 0.15s ease',
             }}
@@ -318,60 +301,11 @@ export const AuthScreen: React.FC = () => {
             {isSubmitting
               ? 'กำลังดำเนินการ...'
               : mode === 'login'
-              ? `เข้าสู่ระบบ (${roleType === 'admin' ? 'Admin' : 'User'})`
-              : `ยืนยันการสมัครสมาชิก`}
+              ? 'เข้าสู่ระบบ'
+              : 'สมัครเป็นผู้ใช้งาน'}
           </button>
         </form>
 
-        {/* Quick Demo Access Buttons */}
-        <div
-          style={{
-            marginTop: '24px',
-            paddingTop: '20px',
-            borderTop: `1px solid ${theme.colors.border}`,
-            textAlign: 'center',
-          }}
-        >
-          <p style={{ fontSize: '11px', color: theme.colors.textDim, marginBottom: '10px' }}>
-            ทดลองใช้งานด่วน (One-Click Quick Access):
-          </p>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={() => switchDemoRole('user')}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                borderRadius: theme.radius.md,
-                border: '1px solid rgba(16, 185, 129, 0.4)',
-                backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                color: '#10b981',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: 'pointer',
-              }}
-            >
-              ทดลองเป็น User
-            </button>
-            <button
-              type="button"
-              onClick={() => switchDemoRole('admin')}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                borderRadius: theme.radius.md,
-                border: '1px solid rgba(99, 102, 241, 0.4)',
-                backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                color: '#a5b4fc',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: 'pointer',
-              }}
-            >
-              ทดลองเป็น Admin
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

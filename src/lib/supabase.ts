@@ -5,9 +5,11 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export const isSupabaseConfigured = Boolean(
-  supabaseUrl && 
-  supabaseAnonKey && 
-  supabaseUrl !== 'https://your-project.supabase.co'
+  supabaseUrl &&
+  supabaseAnonKey &&
+  !supabaseUrl.includes('your-project') &&
+  !supabaseAnonKey.includes('your-anon-key') &&
+  !supabaseAnonKey.includes('******')
 );
 
 export const supabase = isSupabaseConfigured
@@ -19,7 +21,7 @@ export const supabase = isSupabaseConfigured
       },
     });
 
-// Fallback Local Storage Helper for seamless demo/testing without credentials
+// Local data keys used for non-authenticated application state.
 export const LOCAL_STORAGE_KEYS = {
   CURRENT_USER: 'save_app_current_user',
   USERS: 'save_app_users',

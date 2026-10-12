@@ -388,3 +388,4 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ isOpen, onClose 
     </div>
   );
 };
+

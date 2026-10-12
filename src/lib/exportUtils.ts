@@ -2,6 +2,26 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Transaction, Workspace } from '../types';
 
+const thaiFontUrl = new URL('../assets/fonts/NotoSansThai.ttf', import.meta.url).href;
+
+async function embedThaiFont(doc: jsPDF) {
+  const response = await fetch(thaiFontUrl);
+  if (!response.ok) {
+    throw new Error(`Unable to load Thai PDF font: ${response.status} ${response.statusText}`);
+  }
+
+  const fontBytes = new Uint8Array(await response.arrayBuffer());
+  let binaryFont = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < fontBytes.length; offset += chunkSize) {
+    binaryFont += String.fromCharCode(...fontBytes.subarray(offset, offset + chunkSize));
+  }
+
+  doc.addFileToVFS('NotoSansThai.ttf', btoa(binaryFont));
+  doc.addFont('NotoSansThai.ttf', 'NotoSansThai', 'normal');
+  doc.setFont('NotoSansThai', 'normal');
+}
+
 export function formatCurrency(amount: number, currency: string = 'THB'): string {
   return new Intl.NumberFormat('th-TH', {
     style: 'decimal',
@@ -47,7 +67,7 @@ export function exportToCSV(
   }
 }
 
-export function exportToPDF(
+export async function exportToPDF(
   transactions: Transaction[],
   workspace: Workspace,
   dateRangeText: string = 'ทั้งหมด'
@@ -57,6 +77,7 @@ export function exportToPDF(
     unit: 'mm',
     format: 'a4',
   });
+  await embedThaiFont(doc);
 
   const totalIncome = transactions
     .filter((t) => t.type === 'income')
@@ -128,10 +149,13 @@ export function exportToPDF(
       fillColor: [24, 24, 27],
       textColor: [255, 255, 255],
       fontSize: 9,
-      fontStyle: 'bold',
+      font: 'NotoSansThai',
+      fontStyle: 'normal',
       halign: 'left',
     },
     styles: {
+      font: 'NotoSansThai',
+      fontStyle: 'normal',
       fontSize: 8,
       cellPadding: 3,
       textColor: [50, 50, 50],
@@ -141,8 +165,8 @@ export function exportToPDF(
     columnStyles: {
       0: { cellWidth: 24 },
       1: { cellWidth: 20 },
-      2: { cellWidth: 32 },
-      3: { cellWidth: 46 },
+      2: { cellWidth: 30 },
+      3: { cellWidth: 43 },
       4: { cellWidth: 30, halign: 'right' },
       5: { cellWidth: 34 },
     },

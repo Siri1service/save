@@ -143,7 +143,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Filter workspaces accessible by current user or admin
         const accessibleWs = isAdmin
           ? savedWorkspaces
-          : savedWorkspaces.filter((w: Workspace) => w.owner_id === user.id || w.id === 'ws-001' || w.id === 'ws-002');
+          : savedWorkspaces.filter((w: Workspace) => w.owner_id === user.id);
 
         setWorkspaces(accessibleWs);
         if (accessibleWs.length > 0) {
@@ -512,8 +512,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Admin Actions
   const updateUserStatus = async (userId: string, status: 'active' | 'suspended') => {
+    if (!isAdmin) throw new Error('ไม่มีสิทธิ์จัดการสถานะผู้ใช้');
     if (isSupabaseConfigured) {
-      await supabase.from('profiles').update({ status }).eq('id', userId);
+      const { error } = await supabase.from('profiles').update({ status }).eq('id', userId);
+      if (error) throw error;
     }
     const updated = allUsers.map((u) => (u.id === userId ? { ...u, status } : u));
     setAllUsers(updated);
@@ -521,8 +523,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUserRole = async (userId: string, role: 'user' | 'admin') => {
+    if (!isAdmin) throw new Error('ไม่มีสิทธิ์เปลี่ยนบทบาทผู้ใช้');
     if (isSupabaseConfigured) {
-      await supabase.from('profiles').update({ role }).eq('id', userId);
+      const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
+      if (error) throw error;
     }
     const updated = allUsers.map((u) => (u.id === userId ? { ...u, role } : u));
     setAllUsers(updated);
@@ -530,8 +534,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteUser = async (userId: string) => {
+    if (!isAdmin) throw new Error('ไม่มีสิทธิ์ลบผู้ใช้');
     if (isSupabaseConfigured) {
-      await supabase.from('profiles').delete().eq('id', userId);
+      const { error } = await supabase.from('profiles').delete().eq('id', userId);
+      if (error) throw error;
     }
     const updated = allUsers.filter((u) => u.id !== userId);
     setAllUsers(updated);
@@ -545,6 +551,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     customContent?: string,
     recipientUserId?: string
   ) => {
+    if (!isAdmin) throw new Error('ไม่มีสิทธิ์ส่งอีเมลจากระบบ');
     const template = EMAIL_TEMPLATES.find((t) => t.id === templateType);
     const subject = customSubject || template?.subject || 'ข้อความแจ้งเตือนจากระบบ SAVE';
     const content = customContent || template?.content || '';
@@ -562,7 +569,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     if (isSupabaseConfigured) {
-      await supabase.from('email_logs').insert(newLog);
+      const { error } = await supabase.from('email_logs').insert(newLog);
+      if (error) throw error;
     }
 
     const updated = [newLog, ...emailLogs];

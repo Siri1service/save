@@ -1,178 +1,152 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { UserProfile, UserRole } from '../types';
-import { isSupabaseConfigured, supabase, LOCAL_STORAGE_KEYS } from '../lib/supabase';
-import { INITIAL_USERS } from '../lib/mockData';
+import { UserProfile } from '../types';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
+
+interface AuthResult {
+  success: boolean;
+  error?: string;
+  message?: string;
+}
 
 interface AuthContextType {
   user: UserProfile | null;
+  authNotice: string | null;
   isAdmin: boolean;
   isLoading: boolean;
-  login: (email: string, password?: string, asAdmin?: boolean) => Promise<{ success: boolean; error?: string }>;
-  signup: (email: string, fullName: string, password?: string, asAdmin?: boolean) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<AuthResult>;
+  signup: (email: string, fullName: string, password: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
-  switchDemoRole: (role: UserRole) => void;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+async function loadActiveProfile(authUserId: string): Promise<UserProfile> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', authUserId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('ไม่พบข้อมูลโปรไฟล์ กรุณาติดต่อผู้ดูแลระบบ');
+
+  const profile = data as UserProfile;
+  if (profile.status !== 'active') {
+    throw new Error('บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
+  }
+
+  return profile;
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Initialize session
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
       try {
-        if (isSupabaseConfigured) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
+        if (!isSupabaseConfigured) return;
 
-            if (profile) {
-              setUser(profile);
-            } else {
-              // Create profile fallback
-              const newProfile: UserProfile = {
-                id: session.user.id,
-                email: session.user.email || '',
-                full_name: session.user.user_metadata?.full_name || 'ผู้ใช้งาน',
-                role: (session.user.user_metadata?.role as UserRole) || 'user',
-                status: 'active',
-                last_sign_in_at: new Date().toISOString(),
-                created_at: new Date().toISOString(),
-              };
-              setUser(newProfile);
-            }
-          }
-        } else {
-          // Read from local storage or default to first mock user
-          const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.CURRENT_USER);
-          if (saved) {
-            setUser(JSON.parse(saved));
-          } else {
-            const defaultUser = INITIAL_USERS[0]; // Somchai (User)
-            setUser(defaultUser);
-            localStorage.setItem(LOCAL_STORAGE_KEYS.CURRENT_USER, JSON.stringify(defaultUser));
-          }
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (!data.session?.user) return;
+
+        const profile = await loadActiveProfile(data.session.user.id);
+        if (isMounted) setUser(profile);
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (isMounted) {
+          setAuthNotice(getErrorMessage(error, 'ไม่สามารถตรวจสอบสถานะบัญชีได้ กรุณาเข้าสู่ระบบใหม่'));
         }
-      } catch (err) {
-        console.error('Error initializing auth:', err);
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) console.error('Error clearing invalid auth session:', signOutError);
+        if (isMounted) setUser(null);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
-    initAuth();
+    void initAuth();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const login = async (email: string, password?: string, asAdmin?: boolean) => {
+  const login = async (email: string, password: string): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'ระบบยังไม่ได้เชื่อมต่อ Supabase กรุณาตั้งค่าในไฟล์ .env ก่อนเข้าสู่ระบบ' };
+    }
+
     setIsLoading(true);
+    setAuthNotice(null);
     try {
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password: password || '123456',
-        });
-        if (error) throw error;
-        if (data.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (!data.user) throw new Error('ไม่พบข้อมูลบัญชีผู้ใช้');
 
-          if (profile) {
-            // Update last sign in
-            await supabase.from('profiles').update({ last_sign_in_at: new Date().toISOString() }).eq('id', data.user.id);
-            setUser(profile);
-          }
-        }
-        return { success: true };
-      } else {
-        // Mock sign in
-        const existingUsers = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.USERS) || 'null') || INITIAL_USERS;
-        let matchedUser = existingUsers.find((u: UserProfile) => u.email.toLowerCase() === email.toLowerCase());
+      try {
+        const profile = await loadActiveProfile(data.user.id);
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ last_sign_in_at: new Date().toISOString() })
+          .eq('id', data.user.id);
+        if (updateError) throw updateError;
 
-        if (!matchedUser) {
-          // Auto create user if not found in mock mode
-          matchedUser = {
-            id: `user-${Date.now()}`,
-            email,
-            full_name: email.split('@')[0],
-            role: asAdmin ? 'admin' : 'user',
-            status: 'active',
-            last_sign_in_at: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-          };
-          const updatedUsers = [...existingUsers, matchedUser];
-          localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
-        }
-
-        matchedUser.last_sign_in_at = new Date().toISOString();
-        setUser(matchedUser);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.CURRENT_USER, JSON.stringify(matchedUser));
-        return { success: true };
+        setUser({ ...profile, last_sign_in_at: new Date().toISOString() });
+        return { success: true, message: 'เข้าสู่ระบบสำเร็จ' };
+      } catch (profileError) {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) console.error('Error clearing rejected auth session:', signOutError);
+        throw profileError;
       }
-    } catch (err: any) {
-      return { success: false, error: err.message || 'เข้าสู่ระบบไม่สำเร็จ' };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error, 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบอีเมลและรหัสผ่าน') };
     } finally {
       setIsLoading(false);
     }
   };
 
-  const signup = async (email: string, fullName: string, password?: string, asAdmin?: boolean) => {
+  const signup = async (email: string, fullName: string, password: string): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) {
+      return { success: false, error: 'ระบบยังไม่ได้เชื่อมต่อ Supabase กรุณาตั้งค่าในไฟล์ .env ก่อนสมัครสมาชิก' };
+    }
+
     setIsLoading(true);
+    setAuthNotice(null);
     try {
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password: password || '123456',
-          options: {
-            data: {
-              full_name: fullName,
-              role: asAdmin ? 'admin' : 'user',
-            },
-          },
-        });
-        if (error) throw error;
-        if (data.user) {
-          const profile: UserProfile = {
-            id: data.user.id,
-            email,
-            full_name: fullName,
-            role: asAdmin ? 'admin' : 'user',
-            status: 'active',
-            last_sign_in_at: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-          };
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName } },
+      });
+      if (error) throw error;
+
+      if (data.session && data.user) {
+        try {
+          const profile = await loadActiveProfile(data.user.id);
           setUser(profile);
+          return { success: true, message: 'สมัครสมาชิกและเข้าสู่ระบบสำเร็จ' };
+        } catch (profileError) {
+          const { error: signOutError } = await supabase.auth.signOut();
+          if (signOutError) console.error('Error clearing rejected signup session:', signOutError);
+          throw profileError;
         }
-        return { success: true };
-      } else {
-        // Mock signup
-        const existingUsers = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.USERS) || 'null') || INITIAL_USERS;
-        const newUser: UserProfile = {
-          id: `user-${Date.now()}`,
-          email,
-          full_name: fullName,
-          role: asAdmin ? 'admin' : 'user',
-          status: 'active',
-          last_sign_in_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        };
-        const updatedUsers = [...existingUsers, newUser];
-        localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
-        localStorage.setItem(LOCAL_STORAGE_KEYS.CURRENT_USER, JSON.stringify(newUser));
-        setUser(newUser);
-        return { success: true };
       }
-    } catch (err: any) {
-      return { success: false, error: err.message || 'สมัครสมาชิกไม่สำเร็จ' };
+
+      return {
+        success: true,
+        message: 'สมัครสมาชิกสำเร็จ กรุณาตรวจสอบอีเมลและยืนยันบัญชีก่อนเข้าสู่ระบบ',
+      };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error, 'สมัครสมาชิกไม่สำเร็จ กรุณาตรวจสอบข้อมูลแล้วลองใหม่') };
     } finally {
       setIsLoading(false);
     }
@@ -180,45 +154,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     }
-    localStorage.removeItem(LOCAL_STORAGE_KEYS.CURRENT_USER);
     setUser(null);
-  };
-
-  const switchDemoRole = (role: UserRole) => {
-    const existingUsers = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.USERS) || 'null') || INITIAL_USERS;
-    const target = existingUsers.find((u: UserProfile) => u.role === role) || (role === 'admin' ? INITIAL_USERS[1] : INITIAL_USERS[0]);
-    setUser(target);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.CURRENT_USER, JSON.stringify(target));
   };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!user) return;
-    const updated = { ...user, ...updates };
-    setUser(updated);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.CURRENT_USER, JSON.stringify(updated));
 
+    const { role: _role, status: _status, ...safeUpdates } = updates;
     if (isSupabaseConfigured) {
-      await supabase.from('profiles').update(updates).eq('id', user.id);
+      const { error } = await supabase.from('profiles').update(safeUpdates).eq('id', user.id);
+      if (error) throw error;
     }
+
+    setUser({ ...user, ...safeUpdates });
   };
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' && user.status === 'active';
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAdmin,
-        isLoading,
-        login,
-        signup,
-        logout,
-        switchDemoRole,
-        updateProfile,
-      }}
-    >
+    <AuthContext.Provider value={{ user, authNotice, isAdmin, isLoading, login, signup, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

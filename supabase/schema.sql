@@ -96,38 +96,66 @@ alter table public.categories enable row level security;
 alter table public.transactions enable row level security;
 alter table public.email_logs enable row level security;
 
--- Helper function: Is current user an admin?
-create or replace function public.is_admin()
-returns boolean language sql security definer as $$
+-- Helper function: Is the current account active?
+create or replace function public.is_active_user()
+returns boolean language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.profiles
-    where id = auth.uid() and role = 'admin'
+    where id = auth.uid() and status = 'active'
+  );
+$$;
+
+-- Helper function: Is current user an active admin?
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin' and status = 'active'
   );
 $$;
 
 -- Helper function: Does current user have access to workspace?
 create or replace function public.has_workspace_access(ws_id uuid)
-returns boolean language sql security definer as $$
-  select exists (
+returns boolean language sql stable security definer set search_path = public as $$
+  select public.is_admin() or (public.is_active_user() and (exists (
     select 1 from public.workspaces w
     where w.id = ws_id and w.owner_id = auth.uid()
   ) or exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = ws_id and wm.user_id = auth.uid() and wm.status = 'accepted'
-  ) or public.is_admin();
+  )));
 $$;
 
 -- Helper function: Does user have editor or owner role in workspace?
 create or replace function public.has_workspace_edit_access(ws_id uuid)
-returns boolean language sql security definer as $$
-  select exists (
+returns boolean language sql stable security definer set search_path = public as $$
+  select public.is_admin() or (public.is_active_user() and (exists (
     select 1 from public.workspaces w
     where w.id = ws_id and w.owner_id = auth.uid()
   ) or exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = ws_id and wm.user_id = auth.uid() and wm.role in ('owner', 'editor') and wm.status = 'accepted'
-  ) or public.is_admin();
+  )));
 $$;
+
+-- Prevent users from granting themselves admin access or changing their status.
+create or replace function public.guard_profile_privileges()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() = old.id
+    and not public.is_admin()
+    and (new.id is distinct from old.id
+      or new.role is distinct from old.role
+      or new.status is distinct from old.status) then
+    raise exception 'Only an active admin can change profile access';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_profile_privileges on public.profiles;
+create trigger trg_guard_profile_privileges before update on public.profiles
+  for each row execute function public.guard_profile_privileges();
 
 -- PROFILES POLICIES
 create policy "Users can view own profile or admins view all"
@@ -149,15 +177,15 @@ create policy "Users can view workspaces they belong to or admins"
 
 create policy "Users can insert their own workspaces"
   on public.workspaces for insert
-  with check (auth.uid() = owner_id or public.is_admin());
+  with check (public.is_active_user() and (auth.uid() = owner_id or public.is_admin()));
 
 create policy "Owners or admins can update workspaces"
   on public.workspaces for update
-  using (auth.uid() = owner_id or public.is_admin());
+  using (public.is_active_user() and (auth.uid() = owner_id or public.is_admin()));
 
 create policy "Owners or admins can delete workspaces"
   on public.workspaces for delete
-  using (auth.uid() = owner_id or public.is_admin());
+  using (public.is_active_user() and (auth.uid() = owner_id or public.is_admin()));
 
 -- WORKSPACE MEMBERS POLICIES
 create policy "Members or admins can view workspace members"
@@ -166,25 +194,25 @@ create policy "Members or admins can view workspace members"
 
 create policy "Owners or admins can insert workspace members"
   on public.workspace_members for insert
-  with check (
+  with check (public.is_active_user() and (
     exists (select 1 from public.workspaces where id = workspace_id and owner_id = auth.uid())
     or public.is_admin()
-  );
+  ));
 
 create policy "Owners or admins can update workspace members"
   on public.workspace_members for update
-  using (
+  using (public.is_active_user() and (
     exists (select 1 from public.workspaces where id = workspace_id and owner_id = auth.uid())
     or public.is_admin()
-  );
+  ));
 
 create policy "Owners or members themselves can delete membership"
   on public.workspace_members for delete
-  using (
+  using (public.is_active_user() and (
     exists (select 1 from public.workspaces where id = workspace_id and owner_id = auth.uid())
     or user_id = auth.uid()
     or public.is_admin()
-  );
+  ));
 
 -- CATEGORIES POLICIES
 create policy "Users can view categories in permitted workspaces"
@@ -240,7 +268,7 @@ begin
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data->>'role', 'user'),
+    'user',
     'active',
     now()
   );

@@ -277,3 +277,4 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
     </div>
   );
 };
+

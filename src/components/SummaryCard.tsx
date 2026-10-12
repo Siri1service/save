@@ -279,3 +279,4 @@ export const SummaryCard: React.FC<{ onAddClick: () => void }> = ({ onAddClick }
     </div>
   );
 };
+

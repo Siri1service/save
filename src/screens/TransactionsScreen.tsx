@@ -395,3 +395,4 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
     </div>
   );
 };
+
