@@ -121,9 +121,9 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 
 In Supabase **Authentication -> URL Configuration**, set the Site URL to the production domain and add `https://save-tau-eight.vercel.app/**` to Redirect URLs. Email signup must be enabled. Configure a custom SMTP provider in **Authentication -> SMTP Settings** for reliable delivery of confirmation links.
 
-When deploying, create the first administrator account through Supabase Auth, then assign `profiles.role = 'admin'` to that trusted account in the Supabase SQL Editor. The public signup form cannot grant administrator access.
+To make the trusted `siri1service@gmail.com` account an administrator, first sign up and confirm that email, then run `supabase/promote_siri1service_admin.sql` in the Supabase SQL Editor and sign in again. The public signup form cannot grant administrator access; never expose the Supabase service-role key in the app.
 
-If using an existing database, run `supabase/migrations/20261012_auth_access_control.sql` and then `supabase/migrations/20261012_workspace_invitations.sql` in the Supabase SQL Editor before enabling the app. For a new database, run the updated `supabase/schema.sql`. Workspace owners can invite an email as an editor or viewer; the invited person must sign up or log in using that same email to claim access to the shared workspace. If Supabase URL and anon key are not configured, signup and login stay disabled; the app no longer creates demo accounts.
+If using an existing database, run `supabase/migrations/20261012_auth_access_control.sql` and then `supabase/migrations/20261012_workspace_invitations.sql` in the Supabase SQL Editor. The invitation migration is required for shared-workspace invitations, but login remains available if it has not yet been applied. For a new database, run the updated `supabase/schema.sql`. Workspace owners can invite an email as an editor or viewer; the invited person must sign up or log in using that same email to claim access to the shared workspace. If Supabase URL and anon key are not configured, signup and login stay disabled; the app no longer creates demo accounts.
 
 ---
 

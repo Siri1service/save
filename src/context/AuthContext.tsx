@@ -54,7 +54,10 @@ async function loadActiveProfile(authUserId: string): Promise<UserProfile> {
 
 async function acceptPendingWorkspaceInvitations(): Promise<void> {
   const { data, error } = await supabase.rpc('accept_workspace_invitations');
-  if (error) throw error;
+  if (error) {
+    console.error('Could not accept pending workspace invitations. Check that the workspace invitation migration is applied:', error);
+    return;
+  }
 
   if (Array.isArray(data) && data.length > 0) {
     localStorage.setItem('save_app_invited_workspace_id', data[0]);
@@ -77,9 +80,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) throw error;
         if (!data.session?.user) return;
 
-        await acceptPendingWorkspaceInvitations();
         const profile = await loadActiveProfile(data.session.user.id);
         if (isMounted) setUser(profile);
+        await acceptPendingWorkspaceInvitations();
       } catch (error) {
         console.error('Error initializing auth:', error);
         if (isMounted) {
@@ -111,22 +114,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
       if (!data.user) throw new Error('ไม่พบข้อมูลบัญชีผู้ใช้');
 
+      let profile: UserProfile;
       try {
-        await acceptPendingWorkspaceInvitations();
-        const profile = await loadActiveProfile(data.user.id);
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ last_sign_in_at: new Date().toISOString() })
-          .eq('id', data.user.id);
-        if (updateError) throw updateError;
-
-        setUser({ ...profile, last_sign_in_at: new Date().toISOString() });
-        return { success: true, message: 'เข้าสู่ระบบสำเร็จ' };
+        profile = await loadActiveProfile(data.user.id);
       } catch (profileError) {
         const { error: signOutError } = await supabase.auth.signOut();
         if (signOutError) console.error('Error clearing rejected auth session:', signOutError);
         throw profileError;
       }
+
+      const signedInAt = new Date().toISOString();
+      setUser({ ...profile, last_sign_in_at: signedInAt });
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ last_sign_in_at: signedInAt })
+        .eq('id', data.user.id);
+      if (updateError) console.error('Could not update the last sign-in timestamp:', updateError);
+
+      await acceptPendingWorkspaceInvitations();
+      return { success: true, message: 'เข้าสู่ระบบสำเร็จ' };
     } catch (error) {
       if (getErrorCode(error) === 'email_not_confirmed') {
         return {
@@ -134,6 +140,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: 'อีเมลนี้ยังไม่ได้รับการยืนยัน กรุณากดลิงก์ยืนยันที่ส่งไปทางอีเมลก่อนเข้าสู่ระบบ',
           requiresEmailConfirmation: true,
         };
+      }
+      if (getErrorCode(error) === 'invalid_credentials') {
+        return { success: false, error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง' };
       }
       return { success: false, error: getErrorMessage(error, 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบอีเมลและรหัสผ่าน') };
     } finally {
@@ -160,16 +169,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
 
       if (data.session && data.user) {
+        let profile: UserProfile;
         try {
-          await acceptPendingWorkspaceInvitations();
-          const profile = await loadActiveProfile(data.user.id);
-          setUser(profile);
-          return { success: true, message: 'สมัครสมาชิกและเข้าสู่ระบบสำเร็จ' };
+          profile = await loadActiveProfile(data.user.id);
         } catch (profileError) {
           const { error: signOutError } = await supabase.auth.signOut();
           if (signOutError) console.error('Error clearing rejected signup session:', signOutError);
           throw profileError;
         }
+
+        setUser(profile);
+        await acceptPendingWorkspaceInvitations();
+        return { success: true, message: 'สมัครสมาชิกและเข้าสู่ระบบสำเร็จ' };
       }
 
       return {
